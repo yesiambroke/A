@@ -1,0 +1,96 @@
+Sample Axiom WebSocket payloads for quick reference
+==================================================
+
+new_pairs (verbatim sample from live feed)
+------------------------------------------
+{
+  "room": "new_pairs",
+  "content": {
+    "pair_address": "AvXJoKa97QR85HLCW2EXjk7cogS9vE1TWJD4knaiMBFu",
+    "signature": "UDvgyZffq41anQESeemXkyRaen6rHmBxsdDVMmb65ZyVnoKgdvz53dfcorVbCpPVuNFkxTwSUzybPUGC2f9z1cs",
+    "token_address": "DQEZ6DVGoFAR9md34QGVcrz6h7M9apQHhuTYFg27pump",
+    "token_name": "The Retail Coin",
+    "token_ticker": "RETAIL",
+    "token_image": null,
+    "token_uri": "https://ipfs.io/ipfs/bafkreiabkkhcv4l5cw72siniqqw2zlveitglryicrksoe456iuyice3ywa",
+    "token_decimals": 6,
+    "pair_sol_account": "AvXJoKa97QR85HLCW2EXjk7cogS9vE1TWJD4knaiMBFu",
+    "pair_token_account": "7gxrkET3L66mavy5bwZNWxXnPJiLmbfo4V9z3r94Ny5",
+    "protocol": "Pump V1",
+    "protocol_details": {
+      "associatedBondingCurve": "7gxrkET3L66mavy5bwZNWxXnPJiLmbfo4V9z3r94Ny5",
+      "creator": "Ch2FoxySm3oxcJ3ypQq4GLujPmtZwLuLGvt9w9eyWpXA",
+      "isOffchain": false,
+      "tokenProgram": 1,
+      "isMayhem": false
+    },
+    "created_at": "2025-12-05T12:07:55.605Z",
+    "website": null,
+    "twitter": null,
+    "telegram": null,
+    "discord": null,
+    "mint_authority": null,
+    "open_trading": "2025-12-05T12:06:55.605Z",
+    "deployer_address": "Ch2FoxySm3oxcJ3ypQq4GLujPmtZwLuLGvt9w9eyWpXA",
+    "supply": 1000000000,
+    "initial_liquidity_sol": 30,
+    "initial_liquidity_token": 1073000000,
+    "top_10_holders": 3.4199203154140947,
+    "lp_burned": 100,
+    "updated_at": "2025-12-05T12:07:55.605Z",
+    "dev_holds_percent": 3.4199203154141005,
+    "snipers_hold_percent": 3.4199203154140947,
+    "freeze_authority": null,
+    "extra": null,
+    "slot": 384640735
+  }
+}
+
+update_pulse_v2 (array structure with index mapping)
+----------------------------------------------------
+- [0] pairAddress
+- [1] tokenAddress
+- [2] creator
+- [3] tokenName
+- [4] tokenTicker
+- [5] imageUrl
+- [7] protocol
+- [10] twitter
+- [18] volumeSol
+- [19] marketCapSol
+- [20] globalFees
+- [21] virtualSolReserve
+- [22] virtualTokenReserve
+- [26] bondingCurveProgress
+- [27] totalSupply
+- [28] holdersCount
+- [30]/[34] createdAt (timestamp string)
+- [33] metadata object (may include migratedFrom/migratedTo, protocol details)
+
+Example (values are illustrative placeholders):
+[
+  "PAIReXample111",           // 0 pairAddress
+  "TOKENexample111",          // 1 tokenAddress
+  "Creator111",               // 2 creator
+  "Sample Token",             // 3 tokenName
+  "SAMP",                     // 4 tokenTicker
+  "https://img.example",      // 5 imageUrl
+  null,                       // 6 unused
+  "Pump V1",                  // 7 protocol
+  null, null, "https://x.com/sample", // 8-10 socials
+  null, null, null, null, null, null, // 11-16 unused slots
+  120.5,                      // 18 volumeSol
+  980.2,                      // 19 marketCapSol
+  0.5,                        // 20 globalFees
+  30.1,                       // 21 virtualSolReserve
+  3000000,                    // 22 virtualTokenReserve
+  null, null,                 // 23-24 unused
+  null,                       // 25 unused
+  42.7,                       // 26 bondingCurveProgress
+  1_000_000_000,              // 27 totalSupply
+  5836,                       // 28 holdersCount
+  null,                       // 29 unused
+  "2025-12-05T12:07:55.605Z", // 30 createdAt (or 34)
+  null, null,                 // 31-32 unused
+  { "migratedFrom": "Pump V1", "isMayhem": false } // 33 metadata
+]
