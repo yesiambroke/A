@@ -29,8 +29,13 @@ export interface UseMarketDataReturn {
   fetchRecentTrades: (tokenMint: string) => Promise<TradeData[]>;
 }
 
-const MARKET_RELAY_WS_URL = process.env.NEXT_PUBLIC_MARKET_RELAY_WS_URL || 'ws://localhost:8081';
-const MARKET_RELAY_API_URL = process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL || 'http://localhost:8082';
+const MARKET_RELAY_WS_URL =
+  process.env.NEXT_PUBLIC_MARKET_RELAY_WS_URL ||
+  (process.env.NODE_ENV === 'production' ? 'wss://market.a-trade.fun' : 'ws://localhost:8081');
+
+const MARKET_RELAY_API_URL =
+  process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL ||
+  (process.env.NODE_ENV === 'production' ? 'https://token-api.a-trade.fun' : 'http://localhost:8082');
 const RECONNECT_INTERVAL = 5000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
