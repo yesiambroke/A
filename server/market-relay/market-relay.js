@@ -94,6 +94,26 @@ class MarketRelayServer {
     this.app.use(cors());
     this.app.use(express.json());
     
+    // Simple proxy to bypass CORS for pump.fun coin lookup
+    this.app.get('/api/pumpfun/coins/:tokenAddress', async (req, res) => {
+      const { tokenAddress } = req.params;
+      if (!tokenAddress) {
+        return res.status(400).json({ success: false, error: 'tokenAddress is required' });
+      }
+      try {
+        const upstream = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenAddress}`);
+        if (!upstream.ok) {
+          const body = await upstream.text();
+          return res.status(upstream.status).json({ success: false, error: body.substring(0, 200) });
+        }
+        const data = await upstream.json();
+        return res.json({ success: true, data });
+      } catch (err) {
+        console.error('❌ pump.fun proxy error:', err.message);
+        return res.status(500).json({ success: false, error: 'Proxy request failed' });
+      }
+    });
+    
     // Health check endpoint
     this.app.get('/health', (req, res) => {
       res.json({ 

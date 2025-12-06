@@ -5,6 +5,10 @@ import { useSearchParams } from "next/navigation";
 import PageHeader from "@/components/shared/PageHeader";
 import { useMarketData, TradeData } from "@/hooks/useMarketData";
 
+const MARKET_RELAY_API_URL =
+  process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL ||
+  (process.env.NODE_ENV === 'production' ? 'https://token-api.a-trade.fun' : 'http://localhost:8082');
+
 // Custom Icons for Terminal
 const CustomIcons = {
   insider: (
@@ -458,10 +462,11 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         // Fall back to pump.fun API
       }
 
-      // Fallback to pump.fun API
-      const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenAddress}`);
+      // Fallback to pump.fun API (proxied via market-relay to avoid CORS)
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pumpfun/coins/${tokenAddress}`);
       if (response.ok) {
-        const data = await response.json();
+        const payload = await response.json();
+        const data = payload.data || payload;
         return data.pump_swap_pool || data.bonding_curve;
       }
     } catch (error) {
