@@ -216,7 +216,7 @@ class MarketRelayServer {
     
     // REST API for trending coins - returns cached WebSocket data (no longer fetches from API)
     this.app.get('/api/trending', (req, res) => {
-      console.log('🔥 Returning cached trending data from WebSocket...');
+      //console.log('🔥 Returning cached trending data from WebSocket...');
 
       res.json({
         success: true,
@@ -224,7 +224,7 @@ class MarketRelayServer {
         lastUpdate: this.marketData.lastUpdate
       });
 
-      console.log(`📤 Returned ${this.marketData.trending.length} cached trending tokens`);
+      //console.log(`📤 Returned ${this.marketData.trending.length} cached trending tokens`);
     });
 
     // Fetch recent trades for a mint (initial load)
@@ -900,7 +900,7 @@ class MarketRelayServer {
 
     // Check cache first
     if (this.lpCache.has(tokenMint)) {
-      console.log(`✅ Found cached LP address: ${this.lpCache.get(tokenMint)}`);
+      //console.log(`✅ Found cached LP address: ${this.lpCache.get(tokenMint)}`);
       return this.lpCache.get(tokenMint);
     }
 
@@ -978,7 +978,7 @@ class MarketRelayServer {
     const cached = this.lpCache.get(tokenMint);
     if (cached === lpAddress) return;
     this.lpCache.set(tokenMint, lpAddress);
-    console.log(`🗺️ Cached LP mapping ${tokenMint} -> ${lpAddress}`);
+    //console.log(`🗺️ Cached LP mapping ${tokenMint} -> ${lpAddress}`);
   }
 
   async fetchInitialMigratedTokens() {
@@ -1431,9 +1431,9 @@ class MarketRelayServer {
         if (token.protocol === 'Pump V1') {
           this.insertTokenSorted(this.marketData.newMint, token, 'newMint');
           this.marketData.lastUpdate = new Date().toISOString();
-          console.log(`✅ Added new mint token: ${token.tokenName || token.tokenTicker} (${token.tokenAddress.slice(0, 8)}...)`);
+          //console.log(`✅ Added new mint token: ${token.tokenName || token.tokenTicker} (${token.tokenAddress.slice(0, 8)}...)`);
         } else {
-          console.log(`⚠️  Skipping new token (non Pump V1): ${token.tokenName || token.tokenTicker}, protocol=${token.protocol || 'unknown'}`);
+          //console.log(`⚠️  Skipping new token (non Pump V1): ${token.tokenName || token.tokenTicker}, protocol=${token.protocol || 'unknown'}`);
         }
         break;
       default:

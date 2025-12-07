@@ -288,7 +288,7 @@ class MarketDataNormalizer {
     // PRIMARY CASE: If migratedFrom === 'Pump V1', it's migrated (regardless of current protocol)
     // This is the main indicator - if a token has migratedFrom: "Pump V1", it means it originated from Pump V1
     if (normalizedMigratedFrom === 'Pump V1') {
-      console.log(`✅ Migrated token detected (has migratedFrom: Pump V1): protocol=${protocol}, migratedFrom=${normalizedMigratedFrom}, migratedTo=${migratedTo || 'null'}`);
+      //console.log(`✅ Migrated token detected (has migratedFrom: Pump V1): protocol=${protocol}, migratedFrom=${normalizedMigratedFrom}, migratedTo=${migratedTo || 'null'}`);
       return 'migrated';
     }
     
@@ -296,10 +296,10 @@ class MarketDataNormalizer {
     if (protocol === 'Pump AMM') {
       if (normalizedMigratedFrom === 'Pump V1') {
         // Already handled above, but log for clarity
-        console.log(`✅ Migrated token (Pump AMM from Pump V1): protocol=${protocol}, migratedFrom=${normalizedMigratedFrom}`);
+        //console.log(`✅ Migrated token (Pump AMM from Pump V1): protocol=${protocol}, migratedFrom=${normalizedMigratedFrom}`);
         return 'migrated';
       } else {
-        console.log(`⚠️  Pump AMM token but not migrated from Pump V1: migratedFrom=${normalizedMigratedFrom || 'null'}, protocol=${protocol}`);
+        //console.log(`⚠️  Pump AMM token but not migrated from Pump V1: migratedFrom=${normalizedMigratedFrom || 'null'}, protocol=${protocol}`);
       }
     }
     
@@ -308,7 +308,7 @@ class MarketDataNormalizer {
         bondingCurveProgress !== null && 
         bondingCurveProgress >= 100 && 
         migratedTo) {
-      console.log(`✅ Migrated token detected (Pump V1 with migratedTo): protocol=${protocol}, bondingCurveProgress=${bondingCurveProgress}, migratedTo=${migratedTo}`);
+      //console.log(`✅ Migrated token detected (Pump V1 with migratedTo): protocol=${protocol}, bondingCurveProgress=${bondingCurveProgress}, migratedTo=${migratedTo}`);
       return 'migrated';
     }
     
