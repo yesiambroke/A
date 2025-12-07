@@ -897,23 +897,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                      {/* Bubble Map Section */}
                      <div className="flex-1 border border-green-500/20 rounded overflow-hidden bg-black/50">
                        <iframe
-                         src={`https://app.insightx.network/bubblemaps/solana/${currentCoin}?embed=true&apiKey=${INSIGHTX_API_KEY}`}
+                         src={`https://iframe.bubblemaps.io/map?address=${currentCoin}&chain=solana&partnerId=QHOcIgiojGF5sCYInGwR`}
                          className="w-full h-full"
                          style={{ border: 'none' }}
                          title="Bubble Map"
                          allowFullScreen
                        />
-                       <div className="p-2 text-center text-[11px] text-green-300/70 border-t border-green-500/20 bg-black/60">
-                         If the embed fails to load, open externally:&nbsp;
-                         <a
-                           href={`https://app.insightx.network/bubblemaps/solana/${currentCoin}`}
-                           target="_blank"
-                           rel="noreferrer"
-                           className="underline text-green-100 hover:text-green-50"
-                         >
-                           insightx bubble map
-                         </a>
-                       </div>
                      </div>
                    </div>
                  </div>

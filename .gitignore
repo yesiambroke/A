@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+axiom_session.json
+axiom-raw-samples.log
+trending_debug.log

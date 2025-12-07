@@ -2,7 +2,11 @@ const WebSocket = require('ws');
 
 class AxiomWebSocketConnector {
   constructor(authManager, logLevel = 'INFO') {
-    this.wsUrl = "wss://cluster-asia2.axiom.trade/";
+    this.wsUrl =
+      process.env.AXIOM_WS_URL ||
+      (process.env.NODE_ENV === 'production'
+        ? "wss://cluster8.axiom.trade/"
+        : "wss://cluster-asia2.axiom.trade/");
     this.authManager = authManager;
     this.ws = null;
     this.isConnected = false;
@@ -252,7 +256,9 @@ class AxiomWebSocketConnector {
 
   async tryAlternativeConnection(headers) {
     try {
-      const alternativeUrl = "wss://cluster3.axiom.trade/";
+      const alternativeUrl =
+        process.env.AXIOM_WS_URL_FALLBACK ||
+        "wss://cluster3.axiom.trade/";
       this.logger.info(`🔄 Trying alternative WebSocket URL: ${alternativeUrl}`);
       this.wsUrl = alternativeUrl;
       this.ws = new WebSocket(alternativeUrl, { headers });
