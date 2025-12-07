@@ -276,7 +276,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL || 'http://localhost:8082'}/api/holders?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/holders?pairAddress=${pairAddress}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -315,7 +315,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL || 'http://localhost:8082'}/api/pair-info?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pair-info?pairAddress=${pairAddress}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -371,7 +371,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL || 'http://localhost:8082'}/api/token-info?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/token-info?pairAddress=${pairAddress}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -425,7 +425,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL || 'http://localhost:8082'}/api/top-traders?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/top-traders?pairAddress=${pairAddress}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
