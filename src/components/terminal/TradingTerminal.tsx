@@ -8,6 +8,12 @@ import { useMarketData, TradeData } from "@/hooks/useMarketData";
 const MARKET_RELAY_API_URL =
   process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL ||
   (process.env.NODE_ENV === 'production' ? 'https://token-api.a-trade.fun' : 'http://localhost:8082');
+const MARKET_RELAY_API_KEY =
+  process.env.NEXT_PUBLIC_MARKET_RELAY_API_KEY ||
+  'f9f41681-2936-44fc-8fb2-397310e7aef6';
+const INSIGHTX_API_KEY =
+  process.env.NEXT_PUBLIC_INSIGHTX_API_KEY ||
+  'f9f41681-2936-44fc-8fb2-397310e7aef6';
 
 // Custom Icons for Terminal
 const CustomIcons = {
@@ -276,7 +282,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${MARKET_RELAY_API_URL}/api/holders?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/holders?pairAddress=${pairAddress}`, {
+        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -315,7 +323,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pair-info?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pair-info?pairAddress=${pairAddress}`, {
+        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -371,7 +381,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${MARKET_RELAY_API_URL}/api/token-info?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/token-info?pairAddress=${pairAddress}`, {
+        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -425,7 +437,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         return;
       }
 
-      const response = await fetch(`${MARKET_RELAY_API_URL}/api/top-traders?pairAddress=${pairAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/top-traders?pairAddress=${pairAddress}`, {
+        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -463,7 +477,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       }
 
       // Fallback to pump.fun API (proxied via market-relay to avoid CORS)
-      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pumpfun/coins/${tokenAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pumpfun/coins/${tokenAddress}`, {
+        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
+      });
       if (response.ok) {
         const payload = await response.json();
         const data = payload.data || payload;
@@ -879,13 +895,25 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                      </div>
 
                      {/* Bubble Map Section */}
-                     <div className="flex-1 border border-green-500/20 rounded overflow-hidden">
+                     <div className="flex-1 border border-green-500/20 rounded overflow-hidden bg-black/50">
                        <iframe
-                         src={`https://app.insightx.network/bubblemaps/solana/${currentCoin}`}
+                         src={`https://app.insightx.network/bubblemaps/solana/${currentCoin}?embed=true&apiKey=${INSIGHTX_API_KEY}`}
                          className="w-full h-full"
                          style={{ border: 'none' }}
                          title="Bubble Map"
+                         allowFullScreen
                        />
+                       <div className="p-2 text-center text-[11px] text-green-300/70 border-t border-green-500/20 bg-black/60">
+                         If the embed fails to load, open externally:&nbsp;
+                         <a
+                           href={`https://app.insightx.network/bubblemaps/solana/${currentCoin}`}
+                           target="_blank"
+                           rel="noreferrer"
+                           className="underline text-green-100 hover:text-green-50"
+                         >
+                           insightx bubble map
+                         </a>
+                       </div>
                      </div>
                    </div>
                  </div>
