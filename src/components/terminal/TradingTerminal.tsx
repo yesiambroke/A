@@ -897,7 +897,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                      {/* Bubble Map Section */}
                      <div className="flex-1 border border-green-500/20 rounded overflow-hidden bg-black/50">
                        <iframe
-                         src={`https://iframe.bubblemaps.io/map?address=${currentCoin}&chain=solana&partnerId=QHOcIgiojGF5sCYInGwR`}
+                         src={`https://iframe.bubblemaps.io/map?address=${currentCoin}&chain=solana&partnerId=demo`}
                          className="w-full h-full"
                          style={{ border: 'none' }}
                          title="Bubble Map"
