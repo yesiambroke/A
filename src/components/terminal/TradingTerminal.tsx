@@ -830,31 +830,27 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         // Fall back to pump.fun API
       }
 
-      // Fallback to direct pump.fun API (as requested)
-      const url = `https://frontend-api-v3.pump.fun/coins/${tokenAddress}`;
-      console.log('🌐 Fetching pair info from pump.fun:', url);
+      // Fallback to market-relay API (bypasses CORS)
+      const url = `${MARKET_RELAY_API_URL}/api/pair-info?tokenAddress=${tokenAddress}`;
+      console.log('🌐 Fetching pair info from market-relay:', url);
 
-      const response = await fetch(url);
-      console.log('📡 Pumpfun response status:', response.status);
+      const response = await fetch(url, {
+        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
+      });
+      console.log('📡 Market-relay response status:', response.status);
       if (response.ok) {
-        const data = await response.json();
-        console.log('📦 Pumpfun data:', data);
+        const result = await response.json();
+        console.log('📦 Market-relay data:', result);
 
-        // Priority: pump_swap_pool first (migrated tokens), then bonding_curve
-        let pairAddress = null;
-        if (data.pump_swap_pool) {
-          pairAddress = data.pump_swap_pool;
-          console.log('🔄 Using pump_swap_pool (migrated):', pairAddress);
-        } else if (data.bonding_curve) {
-          pairAddress = data.bonding_curve;
-          console.log('📈 Using bonding_curve:', pairAddress);
-        }
-
-        if (pairAddress) {
+        if (result.success && result.pairInfo?.pairAddress) {
+          const pairAddress = result.pairInfo.pairAddress;
+          console.log('🔄 Using pairAddress from market-relay:', pairAddress);
           return pairAddress;
+        } else {
+          console.warn('❌ Market-relay API returned invalid data:', result);
         }
       } else {
-        console.warn('❌ Pump.fun API returned status:', response.status);
+        console.warn('❌ Market-relay API returned status:', response.status);
       }
     } catch (error) {
       console.warn('Failed to resolve pair address:', error);
@@ -869,7 +865,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       return;
     }
     try {
-      const response = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenAddress}`);
+      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pumpfun/coins/${tokenAddress}`, {
+        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
+      });
       if (!response.ok) {
         return;
       }
