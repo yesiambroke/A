@@ -19,6 +19,9 @@ interface LadderSellModalProps {
   onToast: (message: string) => void;
   useJito: boolean;
   setUseJito: (useJito: boolean) => void;
+  positionIndex?: number;
+  onMinimize?: () => void;
+  onRestore?: () => void;
 }
 
 const LadderSellModal: React.FC<LadderSellModalProps> = ({
@@ -28,7 +31,10 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
   connectedWallets,
   onToast,
   useJito,
-  setUseJito
+  setUseJito,
+  positionIndex = 1,
+  onMinimize,
+  onRestore
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -74,7 +80,8 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
       setLadderSellAbortController(null);
       setLadderSellQueue([]);
       setProcessedLadderSellWallets([]);
-      setIsMinimized(false);
+       setIsMinimized(false);
+       onRestore?.();
     }
   }, [isOpen]);
 
@@ -246,9 +253,12 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
   // Render minimized widget or full modal
   if (isMinimized) {
     return (
-      <div className="fixed bottom-4 right-4 z-[9999]">
+      <div className="fixed bottom-4 z-[9999]" style={{ right: `${1 + (positionIndex * 7)}rem` }}>
         <button
-          onClick={() => setIsMinimized(false)}
+          onClick={() => {
+            setIsMinimized(false);
+            onRestore?.();
+          }}
           className="bg-black/90 border border-red-500/30 rounded-lg p-3 shadow-2xl hover:border-red-400/50 transition-all duration-200 group"
           style={{
             boxShadow: '0 10px 25px rgba(0, 0, 0, 0.5), 0 0 40px rgba(239, 68, 68, 0.1)',
@@ -299,7 +309,10 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
            </div>
            <div className="flex items-center gap-0.5">
              <button
-               onClick={() => setIsMinimized(true)}
+                onClick={() => {
+                  setIsMinimized(true);
+                  onMinimize?.();
+                }}
                className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded hover:bg-red-500/10"
              >
                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

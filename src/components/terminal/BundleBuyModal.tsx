@@ -19,6 +19,9 @@ interface BundleBuyModalProps {
   onToast: (message: string) => void;
   useJito: boolean;
   setUseJito: (useJito: boolean) => void;
+  positionIndex?: number;
+  onMinimize?: () => void;
+  onRestore?: () => void;
 }
 
 const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
@@ -28,7 +31,10 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   connectedWallets,
   onToast,
   useJito,
-  setUseJito
+  setUseJito,
+  positionIndex = 2,
+  onMinimize,
+  onRestore
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -46,7 +52,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   const [bundleBuyDelay, setBundleBuyDelay] = useState('1');
 
   // Batch configuration
-  const [batchSize, setBatchSize] = useState(3);
+  const [batchSize, setBatchSize] = useState(5);
   const [useRandomBatchSize, setUseRandomBatchSize] = useState(false);
 
   // Randomization state
@@ -78,7 +84,8 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
       setBundleBuyAbortController(null);
       setBundleBuyBatches([]);
       setProcessedBatches([]);
-      setIsMinimized(false);
+       setIsMinimized(false);
+       onRestore?.();
     }
   }, [isOpen]);
 
@@ -254,28 +261,31 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   // Render minimized widget or full modal
   if (isMinimized) {
     return (
-      <div className="fixed bottom-4 right-4 z-[9999]">
+      <div className="fixed bottom-4 z-[9999]" style={{ right: `${1 + (positionIndex * 7)}rem` }}>
         <button
-          onClick={() => setIsMinimized(false)}
-          className="bg-black/90 border border-green-500/30 rounded-lg p-3 shadow-2xl hover:border-green-400/50 transition-all duration-200 group"
+          onClick={() => {
+            setIsMinimized(false);
+            onRestore?.();
+          }}
+          className="bg-black/90 border border-amber-500/30 rounded-lg p-3 shadow-2xl hover:border-amber-400/50 transition-all duration-200 group"
           style={{
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.5), 0 0 40px rgba(34, 197, 94, 0.1)',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.5), 0 0 40px rgba(245, 158, 11, 0.1)',
           }}
         >
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-green-500/20 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-green-400">
+            <div className="w-6 h-6 rounded bg-amber-500/20 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-400">
                 <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
             <div className="text-left">
-              <div className="text-green-100 font-mono text-xs font-medium">Bundle Buy</div>
-              <div className="text-green-500/70 font-mono text-[10px]">
+              <div className="text-amber-100 font-mono text-xs font-medium">Bundle Buy</div>
+              <div className="text-amber-500/70 font-mono text-[10px]">
                 {isBundleBuyRunning ? `${processedBatches.length}/${bundleBuyBatches.length}` : 'Minimized'}
               </div>
             </div>
-            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity">
               <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
@@ -286,52 +296,55 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]" onClick={handleBackdropClick}>
-      <div className="bg-black/90 border border-green-500/30 rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+      <div className="bg-black/90 border border-amber-500/30 rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
             style={{
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(34, 197, 94, 0.3), 0 0 60px rgba(34, 197, 94, 0.2), 0 0 100px rgba(34, 197, 94, 0.1)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(245, 158, 11, 0.3), 0 0 60px rgba(245, 158, 11, 0.2), 0 0 100px rgba(245, 158, 11, 0.1)',
               filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
             }}>
         {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b border-green-500/20">
+        <div className="flex items-center justify-between p-3 border-b border-amber-500/20">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-green-500/20 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-green-400">
+            <div className="w-6 h-6 rounded bg-amber-500/20 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-400">
                 <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
             <div className="flex items-baseline gap-2">
-              <h2 className="text-green-300 font-mono font-semibold text-sm">Bundle Buy</h2>
-              <span className="text-green-500/60 text-xs font-mono">• Batch processing</span>
+              <h2 className="text-amber-300 font-mono font-semibold text-sm">Bundle Buy</h2>
+              <span className="text-amber-500/60 text-xs font-mono">• Batch processing</span>
             </div>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => setIsMinimized(true)}
-              className="text-green-400 hover:text-green-300 transition-colors p-1.5 rounded hover:bg-green-500/10"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
-              </svg>
-            </button>
-            <button
-              onClick={onClose}
-              className="text-green-400 hover:text-green-300 transition-colors p-1.5 rounded hover:bg-green-500/10"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+           </div>
+           <div className="flex items-center gap-0.5">
+             <button
+                onClick={() => {
+                  setIsMinimized(true);
+                  onMinimize?.();
+                }}
+               className="text-amber-400 hover:text-amber-300 transition-colors p-1.5 rounded hover:bg-amber-500/10"
+             >
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+               </svg>
+             </button>
+             <button
+               onClick={onClose}
+               className="text-amber-400 hover:text-amber-300 transition-colors p-1.5 rounded hover:bg-amber-500/10"
+             >
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+               </svg>
+             </button>
+           </div>
         </div>
 
         {/* Modal Body */}
         <div className="flex-1 flex min-h-0">
           {/* Left Section - Wallet Grid */}
-          <div className="flex-1 p-6 border-r border-green-500/20 flex flex-col">
+          <div className="flex-1 p-6 border-r border-amber-500/20 flex flex-col">
             <div className="flex flex-col space-y-4 flex-1 min-h-0">
               <div className="flex items-center justify-between mb-3">
-                <div className="text-green-300 font-mono font-medium text-sm">
+                <div className="text-amber-300 font-mono font-medium text-sm">
                   Selected Wallets ({selectedWallets.length})
                 </div>
               </div>
@@ -349,7 +362,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                     return (
                       <div
                         key={walletId}
-                        className="bg-black/40 border border-green-500/30 rounded-lg p-3 hover:border-green-400/50 transition-colors min-h-[100px]"
+                        className="bg-black/40 border border-amber-500/30 rounded-lg p-3 hover:border-amber-400/50 transition-colors min-h-[100px]"
                       >
                         {/* Compact Header */}
                         <div className="flex items-center justify-between mb-1.5">
@@ -372,12 +385,12 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                         {/* Compact Balances - Single Line */}
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-1">
-                            <span className="text-green-500/70 font-mono text-[10px]">SOL</span>
-                            <span className="text-green-100 font-mono text-[11px]">{wallet?.solBalance?.toFixed(3) || '0.000'}</span>
+                            <span className="text-amber-500/70 font-mono text-[10px]">SOL</span>
+                            <span className="text-amber-100 font-mono text-[11px]">{wallet?.solBalance?.toFixed(3) || '0.000'}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <span className="text-green-500/70 font-mono text-[10px]">SPL</span>
-                            <span className="text-green-100 font-mono text-[11px]">{wallet?.splBalance ? formatCompact(wallet.splBalance, 2) : '0'}</span>
+                            <span className="text-amber-500/70 font-mono text-[10px]">SPL</span>
+                            <span className="text-amber-100 font-mono text-[11px]">{wallet?.splBalance ? formatCompact(wallet.splBalance, 2) : '0'}</span>
                           </div>
                         </div>
 
@@ -388,10 +401,10 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                             value={amount}
                             onChange={(e) => handleIndividualAmountChange(walletId, e.target.value)}
                             placeholder="0.00"
-                            className="w-14 rounded border border-green-500/30 bg-black/60 px-1.5 py-1 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400 text-[11px] text-center"
+                            className="w-14 rounded border border-amber-500/30 bg-black/60 px-1.5 py-1 text-amber-100 placeholder:text-amber-500/40 focus:outline-none focus:border-amber-400 text-[11px] text-center"
                             disabled={isBundleBuyRunning}
                           />
-                          <span className="text-green-500/60 text-[10px] font-mono">SOL</span>
+                          <span className="text-amber-500/60 text-[10px] font-mono">SOL</span>
                         </div>
                       </div>
                     );
@@ -407,16 +420,16 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
               {/* Amount Input */}
               <div className="space-y-2">
                 <div>
-                  <label className="block text-green-300/80 font-mono text-xs font-medium mb-1">Buy Amounts (SOL)</label>
+                  <label className="block text-amber-300/80 font-mono text-xs font-medium mb-1">Buy Amounts (SOL)</label>
                   <input
                     type="text"
                     value={bundleBuyAmount}
                     onChange={handleMainAmountChange}
                     placeholder="0.1 or 0.1,0.2,0.3"
-                    className="w-full rounded border border-green-500/30 bg-black/60 px-3 py-1.5 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400 text-xs"
+                    className="w-full rounded border border-amber-500/30 bg-black/60 px-3 py-1.5 text-amber-100 placeholder:text-amber-500/40 focus:outline-none focus:border-amber-400 text-xs"
                     disabled={isBundleBuyRunning}
                   />
-                  <div className="text-green-500/60 text-xs font-mono mt-1">
+                  <div className="text-amber-500/60 text-xs font-mono mt-1">
                     Single amount for all, or comma-separated for individual
                   </div>
                 </div>
@@ -424,7 +437,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
 
               {/* Batch Configuration */}
               <div className="space-y-3">
-                <h4 className="text-green-300 font-mono font-medium text-sm">Batch Settings</h4>
+                <h4 className="text-amber-300 font-mono font-medium text-sm">Batch Settings</h4>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -434,24 +447,24 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                       checked={useRandomBatchSize}
                       onChange={(e) => setUseRandomBatchSize(e.target.checked)}
                       disabled={isBundleBuyRunning}
-                      className="rounded border border-green-500/30 bg-black/60 text-green-400 focus:outline-none focus:border-green-400"
+                      className="rounded border border-amber-500/30 bg-black/60 text-amber-400 focus:outline-none focus:border-amber-400"
                     />
-                    <label htmlFor="useRandomBatchSize" className="text-green-300/80 font-mono text-xs">Random batch size (2-5 wallets)</label>
+                    <label htmlFor="useRandomBatchSize" className="text-amber-300/80 font-mono text-xs">Random batch size (2-5 wallets)</label>
                   </div>
 
                   {!useRandomBatchSize && (
                     <div className="flex items-center gap-2">
-                      <label className="text-green-300/80 font-mono text-xs font-medium whitespace-nowrap">Batch Size</label>
+                      <label className="text-amber-300/80 font-mono text-xs font-medium whitespace-nowrap">Batch Size</label>
                       <input
                         type="number"
                         value={batchSize}
-                        onChange={(e) => setBatchSize(Math.max(1, Math.min(5, parseInt(e.target.value) || 3)))}
-                        className="w-16 rounded border border-green-500/30 bg-black/60 px-2 py-1 text-green-100 focus:outline-none focus:border-green-400 text-xs"
+                        onChange={(e) => setBatchSize(Math.max(1, Math.min(5, parseInt(e.target.value) || 5)))}
+                        className="w-16 rounded border border-amber-500/30 bg-black/60 px-2 py-1 text-amber-100 focus:outline-none focus:border-amber-400 text-xs"
                         disabled={isBundleBuyRunning}
                         min="1"
                         max="5"
                       />
-                      <span className="text-green-300/80 font-mono text-xs">wallets/batch</span>
+                      <span className="text-amber-300/80 font-mono text-xs">wallets/batch</span>
                     </div>
                   )}
                 </div>
@@ -459,32 +472,32 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
 
               {/* Settings */}
               <div className="space-y-3">
-                <h4 className="text-green-300 font-mono font-medium text-sm">Randomization</h4>
+                <h4 className="text-amber-300 font-mono font-medium text-sm">Randomization</h4>
 
                 <div className="space-y-2">
                   {/* Randomization Controls */}
                   <div className="space-y-2">
-                    <label className="block text-green-300/80 font-mono text-xs font-medium">Random Amounts</label>
+                    <label className="block text-amber-300/80 font-mono text-xs font-medium">Random Amounts</label>
                     <div className="flex items-end gap-2">
                       <div className="flex-1">
-                        <label className="block text-green-300/80 font-mono text-xs mb-1">Min %</label>
+                        <label className="block text-amber-300/80 font-mono text-xs mb-1">Min %</label>
                         <input
                           type="number"
                           value={bundleBuyMinPercentage}
                           onChange={(e) => setBundleBuyMinPercentage(Math.max(1, Math.min(100, parseInt(e.target.value) || 20)))}
-                          className="w-full rounded border border-green-500/30 bg-black/60 px-2 py-1.5 text-green-100 focus:outline-none focus:border-green-400 text-xs"
+                          className="w-full rounded border border-amber-500/30 bg-black/60 px-2 py-1.5 text-amber-100 focus:outline-none focus:border-amber-400 text-xs"
                           disabled={isBundleBuyRunning}
                           min="1"
                           max="100"
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="block text-green-300/80 font-mono text-xs mb-1">Max %</label>
+                        <label className="block text-amber-300/80 font-mono text-xs mb-1">Max %</label>
                         <input
                           type="number"
                           value={bundleBuyRandomPercentage}
                           onChange={(e) => setBundleBuyRandomPercentage(Math.max(1, Math.min(100, parseInt(e.target.value) || 60)))}
-                          className="w-full rounded border border-green-500/30 bg-black/60 px-2 py-1.5 text-green-100 focus:outline-none focus:border-green-400 text-xs"
+                          className="w-full rounded border border-amber-500/30 bg-black/60 px-2 py-1.5 text-amber-100 focus:outline-none focus:border-amber-400 text-xs"
                           disabled={isBundleBuyRunning}
                           min="1"
                           max="100"
@@ -502,7 +515,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                           const amountsArray = selectedWallets.map(walletId => newAmounts[walletId] || '');
                           setBundleBuyAmount(amountsArray.join(','));
                         }}
-                        className="px-3 py-1.5 rounded border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-100 text-xs font-mono transition-colors whitespace-nowrap"
+                        className="px-3 py-1.5 rounded border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-100 text-xs font-mono transition-colors whitespace-nowrap"
                         disabled={isBundleBuyRunning}
                       >
                         🎲 Randomize
@@ -517,25 +530,25 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                       checked={useTargetAmount}
                       onChange={(e) => setUseTargetAmount(e.target.checked)}
                       disabled={isBundleBuyRunning}
-                      className="rounded border border-green-500/30 bg-black/60 text-green-400 focus:outline-none focus:border-green-400"
+                      className="rounded border border-amber-500/30 bg-black/60 text-amber-400 focus:outline-none focus:border-amber-400"
                     />
-                    <label htmlFor="useTargetAmount" className="text-green-300/80 font-mono text-xs">Use proportional target amount</label>
+                    <label htmlFor="useTargetAmount" className="text-amber-300/80 font-mono text-xs">Use proportional target amount</label>
                   </div>
 
                   {useTargetAmount && (
                     <div className="flex items-center gap-2">
-                      <label className="text-green-300/80 font-mono text-xs font-medium whitespace-nowrap">Target</label>
+                      <label className="text-amber-300/80 font-mono text-xs font-medium whitespace-nowrap">Target</label>
                       <input
                         type="text"
                         value={bundleBuyTargetAmount}
                         onChange={(e) => setBundleBuyTargetAmount(e.target.value)}
                         placeholder="5.0"
-                        className="w-20 rounded border border-green-500/30 bg-black/60 px-2 py-1 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400 text-xs"
+                        className="w-20 rounded border border-amber-500/30 bg-black/60 px-2 py-1 text-amber-100 placeholder:text-amber-500/40 focus:outline-none focus:border-amber-400 text-xs"
                         disabled={isBundleBuyRunning}
                       />
-                      <span className="text-green-300/80 font-mono text-xs">SOL</span>
+                      <span className="text-amber-300/80 font-mono text-xs">SOL</span>
                       <span
-                        className="text-green-400/70 hover:text-green-300 text-xs cursor-help"
+                        className="text-amber-400/70 hover:text-amber-300 text-xs cursor-help"
                         title="Distributed proportionally by wallet balance + randomized within min/max %"
                       >
                         (?)
@@ -544,61 +557,47 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-green-500/20">
+                <div className="pt-2 border-t border-amber-500/20">
                   <div className="flex items-center gap-3">
-                    <label className="text-green-300/80 font-mono text-xs font-medium whitespace-nowrap">Delay</label>
+                    <label className="text-amber-300/80 font-mono text-xs font-medium whitespace-nowrap">Delay</label>
                     <input
                       type="text"
                       value={bundleBuyDelay}
                       onChange={(e) => setBundleBuyDelay(e.target.value)}
                       placeholder="1"
-                      className="w-10 rounded border border-green-500/30 bg-black/60 px-2 py-1 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400 text-xs"
+                      className="w-10 rounded border border-amber-500/30 bg-black/60 px-2 py-1 text-amber-100 placeholder:text-amber-500/40 focus:outline-none focus:border-amber-400 text-xs"
                       disabled={isBundleBuyRunning}
                     />
-                    <span className="text-green-500/60 text-xs font-mono">sec</span>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        id="useJitoBuy"
-                        checked={useJito}
-                        onChange={(e) => setUseJito(e.target.checked)}
-                        disabled={isBundleBuyRunning}
-                        className="rounded border border-green-500/30 bg-black/60 text-green-400 focus:outline-none focus:border-green-400"
-                      />
-                      <label htmlFor="useJitoBuy" className="text-green-300/80 font-mono text-xs cursor-pointer">Jito</label>
-                    </div>
+                    <span className="text-amber-500/60 text-xs font-mono">sec</span>
                   </div>
                 </div>
               </div>
 
               {/* Summary */}
               {selectedWallets.length > 0 && (
-                <div className="p-3 bg-green-500/5 rounded-lg border border-green-500/20">
-                  <h5 className="text-green-300 font-mono font-medium text-xs mb-2">Process Summary</h5>
+                <div className="p-3 bg-amber-500/5 rounded-lg border border-amber-500/20">
+                  <h5 className="text-amber-300 font-mono font-medium text-xs mb-2">Process Summary</h5>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-green-500/70 font-mono">Wallets</span>
-                      <span className="text-green-100 font-mono">{selectedWallets.length}</span>
+                      <span className="text-amber-500/70 font-mono">Wallets</span>
+                      <span className="text-amber-100 font-mono">{selectedWallets.length}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-green-500/70 font-mono">Est. Total</span>
-                      <span className="text-green-100 font-mono">
+                      <span className="text-amber-500/70 font-mono">Est. Total</span>
+                      <span className="text-amber-100 font-mono">
                         {Object.values(bundleBuyAmounts).reduce((sum, amount) => sum + (parseFloat(amount) || 0), 0).toFixed(3)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-green-500/70 font-mono">Batches</span>
-                      <span className="text-green-100 font-mono">
+                      <span className="text-amber-500/70 font-mono">Batches</span>
+                      <span className="text-amber-100 font-mono">
                         {useRandomBatchSize
                           ? `~${Math.ceil(selectedWallets.length / 3)}`
                           : Math.ceil(selectedWallets.length / Math.max(1, Math.min(5, batchSize)))
                         }
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-green-500/70 font-mono">Jito</span>
-                      <span className="text-green-100 font-mono">{useJito ? 'On' : 'Off'}</span>
-                    </div>
+
                   </div>
                 </div>
               )}
@@ -607,12 +606,12 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-green-500/20 p-4">
+        <div className="border-t border-amber-500/20 p-4">
           <div className="flex gap-3">
             <button
               onClick={onClose}
               disabled={isBundleBuyRunning}
-              className="flex-1 py-2 px-3 rounded-lg border border-green-500/30 bg-black/60 text-green-300 hover:bg-green-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm"
+              className="flex-1 py-2 px-3 rounded-lg border border-amber-500/30 bg-black/60 text-amber-300 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm"
             >
               {isBundleBuyRunning ? 'Running...' : 'Cancel'}
             </button>
@@ -643,7 +642,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                   setBundleBuyAbortController(null);
                   startBundleBuy(); // Restart with remaining batches
                 }}
-                className="flex-1 py-2 px-3 rounded-lg border border-green-400 bg-green-500/20 text-green-100 hover:bg-green-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
+                className="flex-1 py-2 px-3 rounded-lg border border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
                   <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -655,7 +654,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
               <button
                 onClick={() => startBundleBuy()}
                 disabled={selectedWallets.length === 0 || !Object.values(bundleBuyAmounts).some(amount => amount && parseFloat(amount) > 0)}
-                className="flex-1 py-2 px-3 rounded-lg border border-green-400 bg-green-500/20 text-green-100 hover:bg-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
+                className="flex-1 py-2 px-3 rounded-lg border border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
                   <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>

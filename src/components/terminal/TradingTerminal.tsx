@@ -88,6 +88,47 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     const [showLadderSellModal, setShowLadderSellModal] = useState(false);
     const [showBundleBuyModal, setShowBundleBuyModal] = useState(false);
 
+    // Minimized modal tracking for positioning
+    const [minimizedModals, setMinimizedModals] = useState<Set<string>>(new Set());
+
+    // Minimize/Restore handlers for dynamic positioning
+    const handleLadderBuyMinimize = () => {
+      setMinimizedModals(prev => new Set([...prev, 'ladderBuy']));
+    };
+    const handleLadderBuyRestore = () => {
+      setMinimizedModals(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('ladderBuy');
+        return newSet;
+      });
+    };
+    const handleLadderSellMinimize = () => {
+      setMinimizedModals(prev => new Set([...prev, 'ladderSell']));
+    };
+    const handleLadderSellRestore = () => {
+      setMinimizedModals(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('ladderSell');
+        return newSet;
+      });
+    };
+    const handleBundleBuyMinimize = () => {
+      setMinimizedModals(prev => new Set([...prev, 'bundleBuy']));
+    };
+    const handleBundleBuyRestore = () => {
+      setMinimizedModals(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('bundleBuy');
+        return newSet;
+      });
+    };
+
+    // Calculate position index for each modal
+    const getPositionIndex = (modalType: string) => {
+      const minimizedArray = Array.from(minimizedModals);
+      return minimizedArray.indexOf(modalType);
+    };
+
   const [showBetaOverlay, setShowBetaOverlay] = useState(false);
   const [timeFormat, setTimeFormat] = useState<'absolute' | 'relative'>('absolute');
   const [holders, setHolders] = useState<any[]>([]);
@@ -147,6 +188,13 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   // WebSocket connection to WSS server
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    // Only connect if user is logged in
+    if (!operator) {
+      console.log('🚫 Skipping WSS connection - user not logged in');
+      setWalletConnectionStatus('disconnected');
+      return;
+    }
 
     const connectToWSS = async () => {
       try {
@@ -254,7 +302,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         wssConnection.close();
       }
     };
-  }, []);
+  }, [operator]);
 
   const tabs = [
     { id: 'wallets' as const, label: 'WALLETS' },
@@ -1163,12 +1211,72 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                               }`}>
                                 {`${trade.solAmount.toFixed(4)} / $${trade.usdAmount.toFixed(2)}`}
                               </td>
-                              <td className="px-3 py-2 whitespace-nowrap text-gray-200 hover:text-white cursor-pointer transition-colors">
-                                {trade.wallet.slice(0, 6)}...{trade.wallet.slice(-4)}
-                              </td>
-                               <td className="px-3 py-2 whitespace-nowrap text-gray-200 hover:text-white cursor-pointer transition-colors">
-                                 {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
+                               <td className="px-3 py-2 whitespace-nowrap">
+                                 <div className="flex items-center gap-2">
+                                   <span
+                                     className="text-gray-200 hover:text-white cursor-pointer transition-colors"
+                                     onClick={() => {
+                                       navigator.clipboard.writeText(trade.wallet);
+                                       showToast('Wallet address copied to clipboard!');
+                                     }}
+                                     title="Click to copy full address"
+                                   >
+                                     {trade.wallet.slice(0, 6)}...{trade.wallet.slice(-4)}
+                                   </span>
+                                   <a
+                                     href={`https://solscan.io/account/${trade.wallet}`}
+                                     target="_blank"
+                                     rel="noopener noreferrer"
+                                     className="text-gray-400 hover:text-green-400 transition-colors"
+                                     title="View on Solscan"
+                                   >
+                                     <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                       <g clipPath="url(#clip0_trades)">
+                                         <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor"/>
+                                         <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3"/>
+                                       </g>
+                                       <defs>
+                                         <clipPath id="clip0_trades">
+                                           <rect width="316" height="315" fill="white"/>
+                                         </clipPath>
+                                       </defs>
+                                     </svg>
+                                   </a>
+                                 </div>
                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="text-gray-200 hover:text-white cursor-pointer transition-colors"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(trade.txId);
+                                        showToast('Transaction ID copied to clipboard!');
+                                      }}
+                                      title="Click to copy full transaction ID"
+                                    >
+                                      {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
+                                    </span>
+                                    <a
+                                      href={`https://solscan.io/tx/${trade.txId}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-gray-400 hover:text-green-400 transition-colors"
+                                      title="View transaction on Solscan"
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <g clipPath="url(#clip0_tx)">
+                                          <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor"/>
+                                          <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3"/>
+                                        </g>
+                                        <defs>
+                                          <clipPath id="clip0_tx">
+                                            <rect width="316" height="315" fill="white"/>
+                                          </clipPath>
+                                        </defs>
+                                      </svg>
+                                    </a>
+                                  </div>
+                                </td>
                              </tr>
                            ))}
                            </tbody>
@@ -1325,10 +1433,29 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                      </div>
                    )}
                  </div>
-                ) : activeTab === 'wallets' ? (
-                  <div className="flex-1 flex flex-col min-h-0">
-                    {/* Wallets Table */}
-                    <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[60vh] p-0">
+                 ) : activeTab === 'wallets' ? (
+                   <div className="flex-1 flex flex-col min-h-0 relative">
+                     {/* Login Required Overlay */}
+                     {!operator && (
+                       <div className="absolute inset-0 bg-gray-800/40 backdrop-blur-sm z-20 flex items-center justify-center border border-green-500/30 rounded">
+                         <div className="text-center space-y-4 p-6 max-w-md">
+                           <div className="text-green-400 font-mono text-xl">[ JOIN THE PLATFORM ]</div>
+                           <div className="text-green-300/80 font-mono text-sm space-y-2">
+                             <p>Welcome to the most advanced trading platform.</p>
+                             <p>Sign in with Telegram to access all trading features.</p>
+                           </div>
+                           <a
+                             href="/login"
+                             className="inline-block px-6 py-3 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
+                           >
+                             Sign Up Now
+                           </a>
+                         </div>
+                       </div>
+                     )}
+
+                     {/* Wallets Table */}
+                     <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[60vh] p-0">
                       {connectedWallets.length === 0 ? (
                         <div className="text-center text-green-500/60 py-12 space-y-3">
                           <div className="text-green-300 font-mono text-lg mb-2">[ NO WALLETS ]</div>
@@ -1367,9 +1494,11 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                          : [...prev, wallet.id]
                                      );
                                    }}
-                                    className={`cursor-pointer transition-colors hover:bg-white/5 ${
-                                      isSelected ? 'bg-white/10 border-l-3 border-green-400 shadow-sm' : ''
-                                    }`}
+                                     className={`cursor-pointer transition-colors ${
+                                       isSelected
+                                         ? 'bg-white/10 border-l-3 border-green-400 shadow-sm hover:bg-white/20'
+                                         : 'hover:bg-white/5'
+                                     }`}
                                   >
                                     <td className="px-3 py-2 whitespace-nowrap">
                                       <div className="flex items-center gap-2">
@@ -1474,9 +1603,28 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
         {/* Right Panel */}
         <div
-          className="bg-black/20 overflow-y-auto flex"
+          className="bg-black/20 overflow-y-auto flex relative"
           style={{ width: `${rightPanelWidth}%` }}
         >
+          {/* Login Required Overlay for Trading Panel */}
+          {!operator && (
+            <div className="absolute inset-0 bg-gray-800/40 backdrop-blur-sm z-20 flex items-center justify-center border border-green-500/30 rounded">
+              <div className="text-center space-y-4 p-6 max-w-md">
+                <div className="text-green-400 font-mono text-xl">[ START TRADING ]</div>
+                <div className="text-green-300/80 font-mono text-sm space-y-2">
+                  <p>Join thousands of traders using our advanced platform.</p>
+                  <p>Create your account to access powerful trading tools and start building your portfolio.</p>
+                </div>
+                <a
+                  href="/login"
+                  className="inline-block px-6 py-3 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
+                >
+                  Get Started
+                </a>
+              </div>
+            </div>
+          )}
+
           <div className="p-4 space-y-4 relative flex-1">
                 {selectedWallets.length > 0 && (
                   <div className="text-xs text-green-300/80 font-mono mb-2 p-2 bg-green-500/5 rounded border border-green-500/20">
@@ -1653,22 +1801,22 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                       <span className="text-red-100 text-xs font-mono font-medium">Ladder Sell</span>
                     </button>
 
-                    <button
-                      className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
-                      onClick={() => setShowBundleBuyModal(true)}
-                    >
-                      <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
-                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                          <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-                          <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2"/>
-                          <circle cx="9" cy="9" r="1" fill="currentColor"/>
-                          <circle cx="15" cy="9" r="1" fill="currentColor"/>
-                          <circle cx="9" cy="15" r="1" fill="currentColor"/>
-                          <circle cx="15" cy="15" r="1" fill="currentColor"/>
-                        </svg>
-                      </div>
-                      <span className="text-green-100 text-xs font-mono font-medium">Bundle Buy</span>
-                    </button>
+                     <button
+                       className="p-3 rounded border border-amber-500/30 bg-black/40 hover:bg-amber-500/10 hover:border-amber-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                       onClick={() => setShowBundleBuyModal(true)}
+                     >
+                       <div className="text-amber-300/80 group-hover:text-amber-200 transition-colors">
+                         <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                           <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+                           <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2"/>
+                           <circle cx="9" cy="9" r="1" fill="currentColor"/>
+                           <circle cx="15" cy="9" r="1" fill="currentColor"/>
+                           <circle cx="9" cy="15" r="1" fill="currentColor"/>
+                           <circle cx="15" cy="15" r="1" fill="currentColor"/>
+                         </svg>
+                       </div>
+                       <span className="text-amber-100 text-xs font-mono font-medium">Bundle Buy</span>
+                     </button>
 
                    <button className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group">
                      <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
@@ -1709,16 +1857,19 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
 
 
-               {/* Ladder Buy Modal */}
-               <LadderBuyModal
-                 isOpen={showLadderBuyModal}
-                 onClose={() => setShowLadderBuyModal(false)}
-                 selectedWallets={selectedWallets}
-                 connectedWallets={connectedWallets}
-                 onToast={showToast}
-                 useJito={useJito}
-                 setUseJito={setUseJito}
-               />
+                {/* Ladder Buy Modal */}
+                <LadderBuyModal
+                  isOpen={showLadderBuyModal}
+                  onClose={() => setShowLadderBuyModal(false)}
+                  selectedWallets={selectedWallets}
+                  connectedWallets={connectedWallets}
+                  onToast={showToast}
+                  useJito={useJito}
+                  setUseJito={setUseJito}
+                  positionIndex={getPositionIndex('ladderBuy')}
+                  onMinimize={handleLadderBuyMinimize}
+                  onRestore={handleLadderBuyRestore}
+                />
 
                 {/* Ladder Sell Modal */}
                 <LadderSellModal
@@ -1729,6 +1880,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   onToast={showToast}
                   useJito={useJito}
                   setUseJito={setUseJito}
+                  positionIndex={getPositionIndex('ladderSell')}
+                  onMinimize={handleLadderSellMinimize}
+                  onRestore={handleLadderSellRestore}
                 />
 
                 {/* Bundle Buy Modal */}
@@ -1740,6 +1894,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   onToast={showToast}
                   useJito={useJito}
                   setUseJito={setUseJito}
+                  positionIndex={getPositionIndex('bundleBuy')}
+                  onMinimize={handleBundleBuyMinimize}
+                  onRestore={handleBundleBuyRestore}
                 />
 
               {showBetaOverlay && (
