@@ -7,6 +7,9 @@ import { useMarketData, TradeData } from "@/hooks/useMarketData";
 import LadderBuyModal from "./LadderBuyModal";
 import LadderSellModal from "./LadderSellModal";
 import BundleBuyModal from "./BundleBuyModal";
+import GatherSolModal from "./GatherSolModal";
+import DistributeSolModal from "./DistributeSolModal";
+import WarmUpWalletModal from "./WarmUpWalletModal";
 
 const MARKET_RELAY_API_URL =
   process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL ||
@@ -87,6 +90,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     const [showLadderBuyModal, setShowLadderBuyModal] = useState(false);
     const [showLadderSellModal, setShowLadderSellModal] = useState(false);
     const [showBundleBuyModal, setShowBundleBuyModal] = useState(false);
+    const [showGatherSolModal, setShowGatherSolModal] = useState(false);
+    const [showDistributeSolModal, setShowDistributeSolModal] = useState(false);
+    const [showWarmUpWalletModal, setShowWarmUpWalletModal] = useState(false);
 
     // Minimized modal tracking for positioning
     const [minimizedModals, setMinimizedModals] = useState<Set<string>>(new Set());
@@ -119,6 +125,36 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       setMinimizedModals(prev => {
         const newSet = new Set(prev);
         newSet.delete('bundleBuy');
+        return newSet;
+      });
+    };
+    const handleGatherSolMinimize = () => {
+      setMinimizedModals(prev => new Set([...prev, 'gatherSol']));
+    };
+    const handleGatherSolRestore = () => {
+      setMinimizedModals(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('gatherSol');
+        return newSet;
+      });
+    };
+    const handleDistributeSolMinimize = () => {
+      setMinimizedModals(prev => new Set([...prev, 'distributeSol']));
+    };
+    const handleDistributeSolRestore = () => {
+      setMinimizedModals(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('distributeSol');
+        return newSet;
+      });
+    };
+    const handleWarmUpWalletMinimize = () => {
+      setMinimizedModals(prev => new Set([...prev, 'warmUpWallet']));
+    };
+    const handleWarmUpWalletRestore = () => {
+      setMinimizedModals(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('warmUpWallet');
         return newSet;
       });
     };
@@ -1815,43 +1851,47 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                            <circle cx="15" cy="15" r="1" fill="currentColor"/>
                          </svg>
                        </div>
-                       <span className="text-amber-100 text-xs font-mono font-medium">Bundle Buy</span>
-                     </button>
+                      <span className="text-amber-100 text-xs font-mono font-medium">Bundle Buy</span>
+                    </button>
 
-                   <button className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group">
-                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
-                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                         <path d="M12 2a10 10 0 0 1 0 20 5 5 0 0 0 0-10 5 5 0 0 0 0-10z" fill="currentColor"/>
-                         <circle cx="12" cy="7" r="1.5" fill="white"/>
-                         <circle cx="12" cy="17" r="1.5" fill="currentColor"/>
-                       </svg>
-                     </div>
-                     <span className="text-green-100 text-xs font-mono font-medium">Distribute SOL</span>
-                   </button>
+                    <button
+                      className="p-3 rounded border border-cyan-500/30 bg-black/40 hover:bg-cyan-500/10 hover:border-cyan-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                      onClick={() => setShowGatherSolModal(true)}
+                    >
+                      <div className="text-cyan-300/80 group-hover:text-cyan-200 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <span className="text-cyan-100 text-xs font-mono font-medium">Gather SOL</span>
+                    </button>
 
-                   <button className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group">
-                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
-                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                         <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2"/>
-                         <path d="M12 6V2M12 22v-4M6 12H2M22 12h-4M8.46 8.46l-2.83-2.83M15.54 15.54l2.83 2.83M8.46 15.54l-2.83 2.83M15.54 8.46l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                       </svg>
-                     </div>
-                     <span className="text-green-100 text-xs font-mono font-medium">Gather SOL</span>
-                   </button>
+                    <button
+                      className="p-3 rounded border border-purple-500/30 bg-black/40 hover:bg-purple-500/10 hover:border-purple-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                      onClick={() => setShowDistributeSolModal(true)}
+                    >
+                      <div className="text-purple-300/80 group-hover:text-purple-200 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                          <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                      </div>
+                      <span className="text-purple-100 text-xs font-mono font-medium">Distribute SOL</span>
+                    </button>
 
-                   <button className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group">
-                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
-                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                         <circle cx="8.5" cy="9.5" r="1.2" fill="currentColor"/>
-                         <circle cx="15.5" cy="9.5" r="1.2" fill="currentColor"/>
-                         <path d="M7.5 14.5c1.5 1.5 4.5 1.5 6 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                         <circle cx="12" cy="16" r="0.5" fill="currentColor"/>
-                       </svg>
-                     </div>
-                     <span className="text-green-100 text-xs font-mono font-medium">Warm Up</span>
-                   </button>
+
+
+                    <button
+                      onClick={() => setShowWarmUpWalletModal(true)}
+                      className="p-3 rounded border border-orange-500/30 bg-black/40 hover:bg-orange-500/10 hover:border-orange-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                    >
+                      <div className="text-orange-300/80 group-hover:text-orange-200 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <span className="text-orange-100 text-xs font-mono font-medium">Warm Up Wallet</span>
+                    </button>
                </div>
              </div>
 
@@ -1898,6 +1938,44 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   onMinimize={handleBundleBuyMinimize}
                   onRestore={handleBundleBuyRestore}
                 />
+
+                {/* Gather SOL Modal */}
+                <GatherSolModal
+                  isOpen={showGatherSolModal}
+                  onClose={() => setShowGatherSolModal(false)}
+                  selectedWallets={selectedWallets}
+                  connectedWallets={connectedWallets}
+                  onToast={showToast}
+                  positionIndex={getPositionIndex('gatherSol')}
+                  onMinimize={handleGatherSolMinimize}
+                  onRestore={handleGatherSolRestore}
+                />
+
+                 {/* Distribute SOL Modal */}
+                 <DistributeSolModal
+                   isOpen={showDistributeSolModal}
+                   onClose={() => setShowDistributeSolModal(false)}
+                   selectedWallets={selectedWallets}
+                   connectedWallets={connectedWallets}
+                   onToast={showToast}
+                   positionIndex={getPositionIndex('distributeSol')}
+                   onMinimize={handleDistributeSolMinimize}
+                   onRestore={handleDistributeSolRestore}
+                 />
+
+                 {/* Warm Up Wallet Modal */}
+                 <WarmUpWalletModal
+                   isOpen={showWarmUpWalletModal}
+                   onClose={() => setShowWarmUpWalletModal(false)}
+                   selectedWallets={selectedWallets}
+                   connectedWallets={connectedWallets}
+                   onToast={showToast}
+                   useJito={useJito}
+                   setUseJito={setUseJito}
+                   positionIndex={getPositionIndex('warmUpWallet')}
+                   onMinimize={handleWarmUpWalletMinimize}
+                   onRestore={handleWarmUpWalletRestore}
+                 />
 
               {showBetaOverlay && (
                <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm border border-green-500/30 rounded-lg flex flex-col items-center justify-center p-4 text-center space-y-3">
