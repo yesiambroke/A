@@ -47,8 +47,8 @@ class WalletWSSServer {
 
     if (useSSL) {
       const sslDir = process.env.LIGHT_WSS_SSL_DIR || '/root/ssl';
-      const keyPath = process.env.LIGHT_WSS_SSL_KEY || `${sslDir}/a-trade.pem`;
-      const certPath = process.env.LIGHT_WSS_SSL_CERT || `${sslDir}/a-trade-key.pem`;
+      const keyPath = process.env.LIGHT_WSS_SSL_KEY || `${sslDir}/a-trade-key.pem`;
+      const certPath = process.env.LIGHT_WSS_SSL_CERT || `${sslDir}/a-trade.pem`;
 
       try {
         const key = fs.readFileSync(keyPath);
