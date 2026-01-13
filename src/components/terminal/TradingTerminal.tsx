@@ -248,12 +248,15 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         const authData = await authResponse.json();
 
         // Now connect to WebSocket with authenticated session
-        const ws = new WebSocket(`ws://localhost:4128?sessionId=${authData.sessionId}`);
+        const LIGHT_WSS_URL = process.env.NEXT_PUBLIC_LIGHT_WSS_URL ||
+                              (process.env.NODE_ENV === 'production' ? 'wss://light.a-trade.fun' : 'ws://localhost:4128');
+        const ws = new WebSocket(`${LIGHT_WSS_URL}?sessionId=${authData.sessionId}`);
 
         ws.onopen = () => {
           console.log('🔌 Connected to WSS server');
           setWssConnection(ws);
           setWalletConnectionStatus('connecting'); // Still connecting until authenticated
+          console.log('🔄 Set wallet connection status to connecting');
         };
 
         ws.onmessage = (event) => {
@@ -262,29 +265,95 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
             console.log('📥 WSS message:', data);
 
             if (data.type === 'auth_success') {
-              console.log('🔐 WSS authentication successful');
-              setWalletConnectionStatus('connected');
+              console.log('🔐 WSS authentication successful for', data.clientType);
+              if (data.clientType === 'terminal') {
+                setWalletConnectionStatus('connected'); // Terminal authenticated, ready for wallet data
+                console.log('🔄 Terminal authenticated, set status to connected');
+              }
 
             } else if (data.type === 'auth_failed') {
               console.error('🔐 WSS authentication failed:', data.reason);
               setWalletConnectionStatus('disconnected');
               ws.close();
 
-             } else if (data.type === 'wallet_data_response' && data.success) {
-               setConnectedWallets(data.wallets || []);
-               if (data.wallets && data.wallets.length > 0 && selectedWallets.length === 0) {
-                 setSelectedWallets([data.wallets[0].id]);
-               }
-             } else if (data.type === 'wallet_data_update') {
-               console.log('📥 Received wallet data update:', data.wallets);
-               setConnectedWallets(data.wallets || []);
-               // If selected wallets were removed, keep only existing ones
-               if (data.wallets && data.wallets.length > 0) {
-                 const existingWalletIds = data.wallets.map((w: any) => w.id);
-                 setSelectedWallets(prev => prev.filter(id => existingWalletIds.includes(id)));
-               } else {
-                 setSelectedWallets([]);
-               }
+            } else if (data.type === 'wallet_data_response' && data.success) {
+                console.log('📥 Received wallet data response:', data);
+                const wallets = data.wallets || [];
+                setConnectedWallets(wallets);
+                console.log('🔄 Updated connectedWallets:', wallets.length, 'wallets');
+
+                if (wallets.length > 0 && selectedWallets.length === 0) {
+                  setSelectedWallets([wallets[0].id]);
+                  console.log('🎯 Auto-selected first wallet:', wallets[0].name);
+                }
+
+                // Ensure status is connected when we have wallet data
+                if (wallets.length > 0) {
+                  setWalletConnectionStatus('connected');
+                  console.log('🔄 Set wallet connection status to connected (have wallets)');
+                }
+              } else if (data.type === 'wallet_update') {
+                console.log('📥 Received wallet update:', data);
+                console.log('🔄 Updating wallets from', connectedWallets.length, 'to', data.wallets?.length || 0, 'wallets');
+
+                const previousWallets = connectedWallets;
+                const newWallets = data.wallets || [];
+
+                setConnectedWallets(newWallets);
+
+                // Log wallet changes for debugging
+                const previousIds = new Set(previousWallets.map((w: any) => w.id));
+                const newIds = new Set(newWallets.map((w: any) => w.id));
+                const addedWallets = newWallets.filter((w: any) => !previousIds.has(w.id));
+                const removedWallets = previousWallets.filter((w: any) => !newIds.has(w.id));
+
+                if (addedWallets.length > 0) {
+                  console.log('➕ Added wallets:', addedWallets.map((w: any) => `${w.name} (${w.id})`));
+                }
+                if (removedWallets.length > 0) {
+                  console.log('➖ Removed wallets:', removedWallets.map((w: any) => `${w.name} (${w.id})`));
+                }
+
+                // Update selected wallets - keep only existing ones
+                if (newWallets.length > 0) {
+                  const existingWalletIds = newWallets.map((w: any) => w.id);
+                  setSelectedWallets(prev => {
+                    const filtered = prev.filter(id => existingWalletIds.includes(id));
+                    if (filtered.length !== prev.length) {
+                      console.log('🔄 Filtered selected wallets from', prev.length, 'to', filtered.length);
+                    }
+                    return filtered;
+                  });
+
+                  // Auto-select first wallet if none selected
+                  setSelectedWallets(prev => {
+                    if (prev.length === 0 && newWallets.length > 0) {
+                      console.log('🎯 Auto-selecting first wallet:', newWallets[0].name);
+                      return [newWallets[0].id];
+                    }
+                    return prev;
+                  });
+                } else {
+                  console.log('📭 No wallets remaining, clearing selection');
+                  setSelectedWallets([]);
+                }
+
+                console.log('✅ Wallet update complete. Total wallets:', newWallets.length);
+            } else if (data.type === 'wallet_client_disconnected') {
+                console.log('🔌 Received wallet client disconnection notification:', data);
+                setWalletConnectionStatus('disconnected');
+                console.log('🔄 Updated wallet connection status to disconnected due to wallet client disconnect');
+            } else if (data.type === 'wallet_client_connected') {
+                console.log('🔌 Received wallet client connection notification:', data);
+                // Request wallet data when wallet client connects
+                const request = {
+                  type: 'wallet_data_request',
+                  userId: operator?.userId?.toString() || 'unknown',
+                  requestId: `wallet_connect_${Date.now()}`,
+                  currentCoin: currentCoin
+                };
+                console.log('📤 Requesting wallet data after wallet client connected:', request);
+                ws.send(JSON.stringify(request));
             } else if (data.type === 'balance_update') {
               console.log('💰 Received balance update:', data.wallets);
               // Update wallet balances without replacing the entire wallet list

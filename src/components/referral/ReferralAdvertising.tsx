@@ -199,7 +199,7 @@ const ReferralAdvertising = ({ user, operator }: { user: UserInfo; operator: Ope
     }
   };
 
-  const referralLink = referralData?.referralCode ? `https://a-trade.fun?ref=${referralData.referralCode}` : '';
+  const referralLink = referralData?.referralCode ? `https://t.me/a_trade_dot_fun_bot?start=${referralData.referralCode}` : '';
 
   return (
     <div className="h-full flex flex-col">

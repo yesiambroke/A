@@ -1,5 +1,7 @@
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const { Pool } = require('pg');
 const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 const { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require('@solana/spl-token');
@@ -7,11 +9,13 @@ require('dotenv').config({ path: '../../.env.local' });
 
 class WalletWSSServer {
   constructor(port = 4128) {
+    this.port = process.env.LIGHT_WSS_PORT || port;
     this.clients = new Map();
     this.clientCounter = 0;
     this.userWallets = new Map();
     this.userConnections = new Map();
     this.userTokens = new Map(); // userId -> { mintAddress, programType }
+    this.httpServer = null; // HTTP/HTTPS server instance
 
     // Initialize Solana connection
     this.solanaConnection = new Connection(
@@ -37,30 +41,84 @@ class WalletWSSServer {
       connectionTimeoutMillis: 5000,
     });
 
-    // Create HTTP server for health check
-    const server = http.createServer((req, res) => {
-      if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          status: 'ok',
-          clients: this.clients.size,
-          uptime: process.uptime()
-        }));
-      } else {
-        res.writeHead(404);
-        res.end();
+    // Create HTTP/HTTPS server for health check with SSL support
+    const useSSL = process.env.NODE_ENV === 'production' || process.env.LIGHT_WSS_USE_SSL === 'true';
+    let server = null;
+
+    if (useSSL) {
+      const sslDir = process.env.LIGHT_WSS_SSL_DIR || '/root/ssl';
+      const keyPath = process.env.LIGHT_WSS_SSL_KEY || `${sslDir}/a-trade.pem`;
+      const certPath = process.env.LIGHT_WSS_SSL_CERT || `${sslDir}/a-trade-key.pem`;
+
+      try {
+        const key = fs.readFileSync(keyPath);
+        const cert = fs.readFileSync(certPath);
+        this.httpServer = https.createServer({ key, cert }, (req, res) => {
+          if (req.url === '/health') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              status: 'ok',
+              clients: this.clients.size,
+              uptime: process.uptime()
+            }));
+          } else {
+            res.writeHead(404);
+            res.end();
+          }
+        });
+        this.httpServer.listen(this.port, () => {
+          console.log(`🔒 Secure Wallet WSS Server (wss) listening on port ${this.port}`);
+          console.log(`Health check: https://localhost:${this.port}/health`);
+        });
+        server = this.httpServer;
+      } catch (err) {
+        console.error('❌ Failed to load SSL certificates for Light WSS:', err);
+        console.log('⚠️ Falling back to HTTP server...');
+        this.httpServer = http.createServer((req, res) => {
+          if (req.url === '/health') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              status: 'ok',
+              clients: this.clients.size,
+              uptime: process.uptime()
+            }));
+          } else {
+            res.writeHead(404);
+            res.end();
+          }
+        });
+        this.httpServer.listen(this.port, () => {
+          console.log(`⚠️ Wallet WSS Server running on port ${this.port} (HTTP fallback)`);
+          console.log(`Health check: http://localhost:${this.port}/health`);
+        });
+        server = this.httpServer;
       }
-    });
+    } else {
+      this.httpServer = http.createServer((req, res) => {
+        if (req.url === '/health') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'ok',
+            clients: this.clients.size,
+            uptime: process.uptime()
+          }));
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+
+      this.httpServer.listen(this.port, () => {
+        console.log(`Wallet WSS Server running on port ${this.port}`);
+        console.log(`Health check: http://localhost:${this.port}/health`);
+      });
+      server = this.httpServer;
+    }
 
     this.wss = new WebSocket.Server({ server });
 
     this.wss.on('connection', (ws, req) => {
       this.handleConnection(ws, req);
-    });
-
-    server.listen(port, () => {
-      console.log(`Wallet WSS Server running on port ${port}`);
-      console.log(`Health check: http://localhost:${port}/health`);
     });
   }
 
@@ -234,11 +292,23 @@ class WalletWSSServer {
     if (!client.userId) return;
 
     const userConnections = this.userConnections.get(client.userId) || { terminal: null, wallet: null };
+    const wasWalletConnected = !!userConnections.wallet;
+    const wasTerminalConnected = !!userConnections.terminal;
 
     if (client.type === 'terminal') {
       userConnections.terminal = client;
     } else if (client.type === 'wallet') {
       userConnections.wallet = client;
+
+      // Notify terminal client that wallet connected (if terminal is already connected)
+      if (userConnections.terminal && userConnections.terminal.ws && userConnections.terminal.ws.readyState === 1) {
+        userConnections.terminal.ws.send(JSON.stringify({
+          type: 'wallet_client_connected',
+          userId: client.userId,
+          timestamp: Date.now()
+        }));
+        console.log(`📤 Notified terminal client ${userConnections.terminal.id} that wallet connected`);
+      }
     }
 
     this.userConnections.set(client.userId, userConnections);
@@ -278,10 +348,25 @@ class WalletWSSServer {
     const userConnections = this.userConnections.get(client.userId);
     if (!userConnections) return;
 
+    const wasWalletConnected = !!userConnections.wallet;
+    const wasTerminalConnected = !!userConnections.terminal;
+
     if (client.type === 'terminal') {
       userConnections.terminal = null;
+      console.log(`🔌 Terminal client disconnected for user ${client.userId}`);
     } else if (client.type === 'wallet') {
       userConnections.wallet = null;
+      console.log(`🔌 Wallet client disconnected for user ${client.userId}`);
+
+      // Notify terminal client that wallet disconnected
+      if (userConnections.terminal && userConnections.terminal.ws && userConnections.terminal.ws.readyState === 1) {
+        userConnections.terminal.ws.send(JSON.stringify({
+          type: 'wallet_client_disconnected',
+          userId: client.userId,
+          timestamp: Date.now()
+        }));
+        console.log(`📤 Notified terminal client ${userConnections.terminal.id} that wallet disconnected`);
+      }
     }
 
     // Stop balance polling if either client disconnects
@@ -309,6 +394,10 @@ class WalletWSSServer {
           this.handleWalletList(client, message);
           break;
 
+        case 'wallet_update':
+          this.handleWalletUpdate(client, message);
+          break;
+
         case 'heartbeat':
           // Echo back heartbeat
           client.ws.send(JSON.stringify({
@@ -327,9 +416,9 @@ class WalletWSSServer {
   }
 
   async handleWalletDataRequest(client, request) {
-    console.log(`📥 Wallet data request from ${client.id} for user ${request.userId}, token: ${request.currentCoin}`);
-    console.log(`🔍 Token is SOL: ${request.currentCoin === 'So11111111111111111111111111111112'}`);
-    console.log(`🔍 Token length: ${request.currentCoin?.length} (should be 44 for valid mint)`);
+    //console.log(`📥 Wallet data request from ${client.id} for user ${request.userId}, token: ${request.currentCoin}`);
+    //console.log(`🔍 Token is SOL: ${request.currentCoin === 'So11111111111111111111111111111112'}`);
+    //console.log(`🔍 Token length: ${request.currentCoin?.length} (should be 44 for valid mint)`);
 
     // Verify the client is authenticated and matches the requested user
     if (!client.authenticated || client.userId !== parseInt(request.userId)) {
@@ -440,6 +529,97 @@ class WalletWSSServer {
     }
   }
 
+  async handleWalletUpdate(client, message) {
+    console.log(`📥 Received wallet update from ${client.id} for user ${client.userId}: ${message.action} ${message.wallet.id}`);
+
+    if (!client.authenticated || !client.userId) {
+      console.log(`❌ Unauthorized wallet update from ${client.id}`);
+      return;
+    }
+
+    try {
+      const userWallets = this.userWallets.get(client.userId) || [];
+      let updatedWallets = [...userWallets];
+      const walletId = message.wallet.id;
+
+      if (message.action === 'add') {
+        // Add wallet if it doesn't exist
+        const existingIndex = updatedWallets.findIndex(w => w.id === walletId);
+        if (existingIndex === -1) {
+          updatedWallets.push({
+            id: message.wallet.id,
+            publicKey: message.wallet.publicKey,
+            name: message.wallet.name || `Wallet ${walletId.slice(-4)}`,
+            solBalance: 0,
+            splBalance: 0,
+            lastUpdated: Date.now()
+          });
+          console.log(`➕ Added wallet ${walletId} for user ${client.userId}`);
+        } else {
+          console.log(`⚠️ Wallet ${walletId} already exists for user ${client.userId}, skipping add`);
+        }
+      } else if (message.action === 'remove') {
+        // Remove wallet
+        const initialLength = updatedWallets.length;
+        updatedWallets = updatedWallets.filter(w => w.id !== walletId);
+        if (updatedWallets.length < initialLength) {
+          console.log(`➖ Removed wallet ${walletId} for user ${client.userId}`);
+        } else {
+          console.log(`⚠️ Wallet ${walletId} not found for user ${client.userId}, nothing to remove`);
+        }
+      } else if (message.action === 'update') {
+        // Update existing wallet
+        const walletIndex = updatedWallets.findIndex(w => w.id === walletId);
+        if (walletIndex !== -1) {
+          updatedWallets[walletIndex] = {
+            ...updatedWallets[walletIndex],
+            ...message.wallet,
+            lastUpdated: Date.now()
+          };
+          console.log(`🔄 Updated wallet ${walletId} for user ${client.userId}`);
+        } else {
+          console.log(`⚠️ Wallet ${walletId} not found for user ${client.userId}, cannot update`);
+        }
+      }
+
+      // Update stored wallets
+      this.userWallets.set(client.userId, updatedWallets);
+
+      // Send acknowledgment
+      client.ws.send(JSON.stringify({
+        type: 'wallet_update_ack',
+        action: message.action,
+        walletId: walletId,
+        totalWallets: updatedWallets.length,
+        timestamp: Date.now()
+      }));
+
+      // Broadcast wallet update to terminal client if connected
+      const userConnections = this.userConnections.get(client.userId);
+      if (userConnections?.terminal) {
+        const terminalClient = userConnections.terminal;
+        if (terminalClient.ws && terminalClient.ws.readyState === 1) { // OPEN
+          terminalClient.ws.send(JSON.stringify({
+            type: 'wallet_update',
+            wallets: updatedWallets,
+            timestamp: Date.now()
+          }));
+          console.log(`📤 Broadcast wallet update to terminal client ${terminalClient.id} (${updatedWallets.length} wallets)`);
+        }
+      }
+
+    } catch (error) {
+      console.error(`Failed to process wallet update for user ${client.userId}:`, error);
+      client.ws.send(JSON.stringify({
+        type: 'wallet_update_error',
+        action: message.action,
+        walletId: message.wallet.id,
+        error: 'Failed to process wallet update',
+        timestamp: Date.now()
+      }));
+    }
+  }
+
   async enrichWalletsWithBalances(wallets) {
     // Initialize wallets with zero balances - real balances will be updated by polling
     return wallets.map(wallet => ({
@@ -451,7 +631,7 @@ class WalletWSSServer {
   }
 
   broadcastBalanceUpdates(userId, balanceUpdates) {
-    console.log(`📡 Broadcasting balance updates for user ${userId}:`, balanceUpdates);
+    //console.log(`📡 Broadcasting balance updates for user ${userId}:`, balanceUpdates);
 
     const userConnections = this.userConnections.get(userId);
     if (!userConnections?.terminal) {
@@ -468,7 +648,7 @@ class WalletWSSServer {
       });
 
       terminalClient.ws.send(message);
-      console.log(`✅ Sent balance update message to terminal client ${terminalClient.id}`);
+      //console.log(`✅ Sent balance update message to terminal client ${terminalClient.id}`);
     } else {
       console.log(`❌ Terminal client not connected or not ready (state: ${terminalClient.ws?.readyState})`);
     }
@@ -526,7 +706,7 @@ class SolBalancePoller {
     this.stopPollingForUser(userId);
 
     if (walletPubKeys.length === 0) {
-      console.log(`⚠️ No wallets to poll for user ${userId}`);
+      //console.log(`⚠️ No wallets to poll for user ${userId}`);
       return;
     }
 
@@ -572,7 +752,7 @@ class SolBalancePoller {
     }
 
     const pollType = tokenInfo ? 'SOL + SPL' : 'SOL only';
-    console.log(`🔍 Polling ${pollType} balances for user ${userId} (${walletPubKeys.length} wallets)`);
+    //console.log(`🔍 Polling ${pollType} balances for user ${userId} (${walletPubKeys.length} wallets)`);
 
     try {
       // Convert string pubkeys to PublicKey objects
@@ -590,7 +770,7 @@ class SolBalancePoller {
       // If we have token info, get SPL balances
       let splBalances = new Map();
       if (tokenInfo) {
-        console.log(`🔍 Fetching SPL balances for token ${tokenInfo.mintAddress} (${tokenInfo.programType})`);
+        //console.log(`🔍 Fetching SPL balances for token ${tokenInfo.mintAddress} (${tokenInfo.programType})`);
         splBalances = await this.getSplBalances(walletPubKeys, tokenInfo);
       } else {
         console.log(`🔍 No token info available, skipping SPL balance check`);
@@ -603,7 +783,7 @@ class SolBalancePoller {
 
         currentBalances.set(pubKey, { solBalance, splBalance });
 
-        console.log(`💰 ${pubKey.substring(0, 8)}...${pubKey.substring(pubKey.length - 8)}: ${solBalance} SOL, ${splBalance} SPL`);
+        //console.log(`💰 ${pubKey.substring(0, 8)}...${pubKey.substring(pubKey.length - 8)}: ${solBalance} SOL, ${splBalance} SPL`);
 
         // Always send updates on first poll, or when balance actually changes
         const lastBalances = this.lastBalances.get(userId) || new Map();
@@ -627,7 +807,7 @@ class SolBalancePoller {
       // Update last balances
       this.lastBalances.set(userId, currentBalances);
 
-      console.log(`📊 Balance check complete for user ${userId}: ${balanceUpdates.length} updates`);
+      //console.log(`📊 Balance check complete for user ${userId}: ${balanceUpdates.length} updates`);
 
       // Broadcast balance updates every poll (always send current balances)
       const updatesToSend = Array.from(currentBalances.entries()).map(([pubKey, balances]) => ({
@@ -637,7 +817,7 @@ class SolBalancePoller {
         lastUpdated: Date.now()
       }));
 
-      console.log(`📤 Broadcasting ${updatesToSend.length} balance updates for user ${userId} (${balanceUpdates.length > 0 ? 'with changes' : 'no changes'})`);
+      //console.log(`📤 Broadcasting ${updatesToSend.length} balance updates for user ${userId} (${balanceUpdates.length > 0 ? 'with changes' : 'no changes'})`);
 
       // This will be called by the WSS server
       if (this.onBalanceUpdate) {

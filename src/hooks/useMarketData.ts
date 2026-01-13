@@ -31,7 +31,7 @@ export interface UseMarketDataReturn {
 
 const MARKET_RELAY_WS_URL =
   process.env.NEXT_PUBLIC_MARKET_RELAY_WS_URL ||
-  (process.env.NODE_ENV === 'production' ? 'wss://market.a-trade.fun' : 'ws://localhost:8081');
+  (process.env.NODE_ENV === 'production' ? 'wss://market-data.a-trade.fun' : 'ws://localhost:8081');
 
 const MARKET_RELAY_API_URL =
   process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL ||
