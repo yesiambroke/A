@@ -871,8 +871,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       if (!response.ok) {
         return;
       }
-      const data = await response.json();
-      if (data?.pump_swap_pool) {
+      const result = await response.json();
+      if (result?.data?.pump_swap_pool) {
         setProtocolType('amm');
       } else {
         setProtocolType('v1');
