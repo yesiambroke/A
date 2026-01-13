@@ -2,10 +2,6 @@ import { getSessionFromCookies } from "@/lib/auth/session";
 import TradingTerminal from "@/components/terminal/TradingTerminal";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "A-TRADE://terminal",
-};
-
 const TradingPage = async ({
   searchParams,
 }: {

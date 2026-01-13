@@ -148,35 +148,21 @@ const PageHeader = ({ currentPage, operator }: PageHeaderProps) => {
           {currentPage === 'referral' && (
             <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-0.5 bg-green-400 rounded-full"></div>
           )}
-        </Link>
-        <Link
-          href="/upgrade"
-          className={`flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold transition-all duration-200 relative ${
-            currentPage === 'upgrade'
-              ? 'border-green-400 bg-green-500/10 text-black shadow-md shadow-green-500/30'
-              : 'border-black/50 bg-black/20 text-green-400 hover:bg-black/30 hover:border-green-500/50'
-          }`}
-        >
-          <span className="text-green-500">▲</span>
-          <span className="hidden sm:inline">Upgrade</span>
-          {currentPage === 'upgrade' && (
-            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-0.5 bg-green-400 rounded-full"></div>
-          )}
-        </Link>
-        <Link
-          href="/terminal"
-          className={`flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold transition-all duration-200 relative ${
-            currentPage === 'terminal'
-              ? 'border-green-400 bg-green-500/10 text-black shadow-md shadow-green-500/30'
-              : 'border-black/50 bg-black/20 text-green-400 hover:bg-black/30 hover:border-green-500/50'
-          }`}
-        >
-          <span className="text-green-500">▊</span>
-          <span className="hidden sm:inline">Terminal</span>
-          {currentPage === 'terminal' && (
-            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-0.5 bg-green-400 rounded-full"></div>
-          )}
-        </Link>
+         </Link>
+         <Link
+           href="/upgrade"
+           className={`flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold transition-all duration-200 relative ${
+             currentPage === 'upgrade'
+               ? 'border-green-400 bg-green-500/10 text-black shadow-md shadow-green-500/30'
+               : 'border-black/50 bg-black/20 text-green-400 hover:bg-black/30 hover:border-green-500/50'
+           }`}
+         >
+           <span className="text-green-500">▲</span>
+           <span className="hidden sm:inline">Upgrade</span>
+           {currentPage === 'upgrade' && (
+             <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-0.5 bg-green-400 rounded-full"></div>
+           )}
+         </Link>
 
         {/* Profile Menu */}
         {operator ? (

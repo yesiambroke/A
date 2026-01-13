@@ -41,6 +41,15 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Ignore node_modules everywhere
+node_modules/
+**/node_modules/
+
+# Sometimes people also add these:
+npm-debug.log
+yarn-error.log
+.pnpm-store/
+
 axiom_session.json
 axiom-raw-samples.log
 trending_debug.log

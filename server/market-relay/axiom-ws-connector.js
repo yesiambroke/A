@@ -336,7 +336,7 @@ class AxiomWebSocketConnector {
           const trendingData = data.content?.rankings || data.content;
           console.log(`📈 Received trending coins update (${trendingData?.length || 0} tokens)`);
           if (trendingData && trendingData.length > 0) {
-            console.log(`📊 First trending token sample: ${JSON.stringify(trendingData[0]).substring(0, 200)}`);
+            //console.log(`📊 First trending token sample: ${JSON.stringify(trendingData[0]).substring(0, 200)}`);
           }
           if (this._callbacks["new-trending:1h"]) {
             this._callbacks["new-trending:1h"](trendingData);

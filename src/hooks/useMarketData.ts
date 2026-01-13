@@ -131,10 +131,12 @@ export const useMarketData = (): UseMarketDataReturn => {
     return [];
   }, []);
 
-  const debouncedUpdateTokens = useCallback(() => {
-    if (!mountedRef.current || pendingUpdatesRef.current.length === 0) return;
+  const debouncedUpdateTokens = useCallback((updates: NormalizedToken[] = []) => {
+    if (!mountedRef.current) return;
 
-    const updates = [...pendingUpdatesRef.current];
+    const tokensToUpdate = updates.length > 0 ? updates : [...pendingUpdatesRef.current];
+    if (tokensToUpdate.length === 0) return;
+
     pendingUpdatesRef.current = [];
 
     setMarketData((prev) => {
@@ -215,15 +217,7 @@ export const useMarketData = (): UseMarketDataReturn => {
       });
 
       if (changed) {
-        updated.migrated = dedupeTokens(updated.migrated)
-          .sort((a, b) => (b.marketCapUSD || 0) - (a.marketCapUSD || 0))
-          .slice(0, 20);
-        updated.finalStretch = dedupeTokens(updated.finalStretch)
-          .sort((a, b) => (b.bondingCurveProgress || 0) - (a.bondingCurveProgress || 0))
-          .slice(0, 20);
-        updated.newMint = dedupeTokens(updated.newMint)
-          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-          .slice(0, 20);
+        // Keep existing order to avoid jumps - server sends sorted data
         updated.lastUpdate = new Date().toISOString();
         hasCachedDataRef.current =
           updated.migrated.length > 0 || updated.finalStretch.length > 0 || updated.trending.length > 0 || updated.newMint.length > 0;
@@ -253,16 +247,12 @@ export const useMarketData = (): UseMarketDataReturn => {
 
         switch (message.type) {
           case 'market_data':
-            if (message.data && !initialDataLoadedRef.current) {
+            if (message.data) {
               const newTimestamp = message.data.lastUpdate || new Date().toISOString();
 
               setMarketData((prev) => {
-                if (initialDataLoadedRef.current) {
-                  return prev;
-                }
-
                 const newData = {
-                  trending: dedupeTokens(message.data.trending || []),
+                  trending: initialDataLoadedRef.current ? prev.trending : dedupeTokens(message.data.trending || []),
                   finalStretch: dedupeTokens(message.data.finalStretch || []),
                   migrated: dedupeTokens(message.data.migrated || []),
                   newMint: dedupeTokens(message.data.newMint || []),
@@ -273,8 +263,10 @@ export const useMarketData = (): UseMarketDataReturn => {
                 hasCachedDataRef.current =
                   newData.trending.length > 0 || newData.migrated.length > 0 || newData.finalStretch.length > 0 || newData.newMint.length > 0;
 
-                initialDataLoadedRef.current = true;
-                lastUpdateTimestampRef.current = newTimestamp;
+                if (!initialDataLoadedRef.current) {
+                  initialDataLoadedRef.current = true;
+                  lastUpdateTimestampRef.current = newTimestamp;
+                }
 
                 return newData;
               });
@@ -343,10 +335,7 @@ export const useMarketData = (): UseMarketDataReturn => {
                 clearTimeout(updateTimeoutRef.current);
               }
 
-              updateTimeoutRef.current = setTimeout(() => {
-                debouncedUpdateTokens();
-                updateTimeoutRef.current = null;
-              }, 100);
+              debouncedUpdateTokens();
             }
             break;
 

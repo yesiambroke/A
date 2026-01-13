@@ -1,0 +1,26 @@
+{
+  "name": "light-wss",
+  "version": "1.0.0",
+  "description": "Light WebSocket Server for Wallet Authentication and Transaction Coordination",
+  "main": "wallet-wss-server.js",
+  "scripts": {
+    "start": "node wallet-wss-server.js",
+    "dev": "node wallet-wss-server.js"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "dotenv": "^16.4.7",
+    "pg": "^8.16.3",
+    "ws": "^8.18.0"
+  },
+  "keywords": [
+    "websocket",
+    "wallet",
+    "solana",
+    "trading",
+    "authentication"
+  ],
+  "author": "Gembol",
+  "license": "MIT"
+}

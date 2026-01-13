@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import PageHeader from "@/components/shared/PageHeader";
 import { useMarketData, TradeData } from "@/hooks/useMarketData";
+import LadderBuyModal from "./LadderBuyModal";
+import LadderSellModal from "./LadderSellModal";
+import BundleBuyModal from "./BundleBuyModal";
 
 const MARKET_RELAY_API_URL =
   process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL ||
@@ -43,6 +46,14 @@ const CustomIcons = {
       <line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" strokeWidth="2"/>
       <line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2"/>
     </svg>
+  ),
+
+  slippage: (
+    <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
+      <path d="M3 12h18M3 12l3-3m-3 3l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M9 8l2-2 2 2M9 16l2 2 2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M15 6v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
   )
 };
 
@@ -67,7 +78,17 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
   const [tradeSolAmount, setTradeSolAmount] = useState<string>('');
   const [tradeTokenAmount, setTradeTokenAmount] = useState<string>('');
-  const [showBetaOverlay, setShowBetaOverlay] = useState(true);
+  const [tradePercentage, setTradePercentage] = useState<string>('');
+  const [slippage, setSlippage] = useState<string>('5'); // Default 5% slippage
+  const [useJito, setUseJito] = useState<boolean>(true); // Default Jito enabled
+  const [showSlippageTooltip, setShowSlippageTooltip] = useState(false);
+
+    // Ladder Buy modal state
+    const [showLadderBuyModal, setShowLadderBuyModal] = useState(false);
+    const [showLadderSellModal, setShowLadderSellModal] = useState(false);
+    const [showBundleBuyModal, setShowBundleBuyModal] = useState(false);
+
+  const [showBetaOverlay, setShowBetaOverlay] = useState(false);
   const [timeFormat, setTimeFormat] = useState<'absolute' | 'relative'>('absolute');
   const [holders, setHolders] = useState<any[]>([]);
   const [holdersLoading, setHoldersLoading] = useState(false);
@@ -78,8 +99,33 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const [protocolType, setProtocolType] = useState<'v1' | 'amm' | null>(null);
   const [traders, setTraders] = useState<any[]>([]);
   const [tradersLoading, setTradersLoading] = useState(false);
-  const searchParams = useSearchParams();
-  const { subscribeToTrades, isConnected, marketData, fetchRecentTrades } = useMarketData();
+  const [connectedWallets, setConnectedWallets] = useState<any[]>([]);
+  const [walletConnectionStatus, setWalletConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [selectedWallets, setSelectedWallets] = useState<string[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Toast notification function
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 2000); // Hide after 2 seconds
+  };
+  const [wssConnection, setWssConnection] = useState<WebSocket | null>(null);
+   const searchParams = useSearchParams();
+   const router = useRouter();
+
+   // Redirect to screener if no coin parameter
+   if (!searchParams.get('coin')) {
+     React.useEffect(() => {
+       router.push('/screener');
+     }, [router]);
+     return (
+       <div className="min-h-screen bg-black flex items-center justify-center text-green-400 font-mono">
+         Redirecting to screener...
+       </div>
+     );
+   }
+
+   const { subscribeToTrades, isConnected, marketData, fetchRecentTrades } = useMarketData();
   const tradeUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Load saved layout preferences
@@ -87,10 +133,127 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     const savedChartHeight = localStorage.getItem('trading-chart-height');
     const savedRightPanelWidth = localStorage.getItem('trading-right-panel-width');
     const savedTimeFormat = localStorage.getItem('trading-time-format');
-    
+
     if (savedChartHeight) setChartHeight(parseFloat(savedChartHeight));
     if (savedRightPanelWidth) setRightPanelWidth(parseFloat(savedRightPanelWidth));
     if (savedTimeFormat) setTimeFormat(savedTimeFormat as 'absolute' | 'relative');
+  }, []);
+
+  // Check wallet connection status on mount
+  React.useEffect(() => {
+    checkWalletConnection();
+  }, []);
+
+  // WebSocket connection to WSS server
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const connectToWSS = async () => {
+      try {
+        // First authenticate via HTTP to get session validation
+        const authResponse = await fetch('/api/wallets/authenticate-wss', {
+          method: 'POST'
+        });
+
+        if (!authResponse.ok) {
+          console.error('WSS authentication failed');
+          setWalletConnectionStatus('disconnected');
+          return;
+        }
+
+        const authData = await authResponse.json();
+
+        // Now connect to WebSocket with authenticated session
+        const ws = new WebSocket(`ws://localhost:4128?sessionId=${authData.sessionId}`);
+
+        ws.onopen = () => {
+          console.log('🔌 Connected to WSS server');
+          setWssConnection(ws);
+          setWalletConnectionStatus('connecting'); // Still connecting until authenticated
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('📥 WSS message:', data);
+
+            if (data.type === 'auth_success') {
+              console.log('🔐 WSS authentication successful');
+              setWalletConnectionStatus('connected');
+
+            } else if (data.type === 'auth_failed') {
+              console.error('🔐 WSS authentication failed:', data.reason);
+              setWalletConnectionStatus('disconnected');
+              ws.close();
+
+             } else if (data.type === 'wallet_data_response' && data.success) {
+               setConnectedWallets(data.wallets || []);
+               if (data.wallets && data.wallets.length > 0 && selectedWallets.length === 0) {
+                 setSelectedWallets([data.wallets[0].id]);
+               }
+             } else if (data.type === 'wallet_data_update') {
+               console.log('📥 Received wallet data update:', data.wallets);
+               setConnectedWallets(data.wallets || []);
+               // If selected wallets were removed, keep only existing ones
+               if (data.wallets && data.wallets.length > 0) {
+                 const existingWalletIds = data.wallets.map((w: any) => w.id);
+                 setSelectedWallets(prev => prev.filter(id => existingWalletIds.includes(id)));
+               } else {
+                 setSelectedWallets([]);
+               }
+            } else if (data.type === 'balance_update') {
+              console.log('💰 Received balance update:', data.wallets);
+              // Update wallet balances without replacing the entire wallet list
+              setConnectedWallets(currentWallets => {
+                const updated = currentWallets.map(wallet => {
+                  const balanceUpdate = data.wallets.find((update: any) => update.publicKey === wallet.publicKey);
+                  if (balanceUpdate) {
+                    console.log(`💸 Updating balance for ${wallet.name}: ${balanceUpdate.solBalance} SOL, ${balanceUpdate.splBalance || 0} SPL`);
+                    return {
+                      ...wallet,
+                      solBalance: balanceUpdate.solBalance,
+                      splBalance: balanceUpdate.splBalance || 0,
+                      lastUpdated: balanceUpdate.lastUpdated
+                    };
+                  }
+                  return wallet;
+                });
+                console.log('🔄 Updated wallets state:', updated.map(w => ({ name: w.name, sol: w.solBalance, spl: w.splBalance })));
+                return updated;
+              });
+            }
+          } catch (error) {
+            console.error('Failed to parse WSS message:', error);
+          }
+        };
+
+
+
+        ws.onclose = () => {
+          console.log('🔌 Disconnected from WSS server');
+          setWssConnection(null);
+          setWalletConnectionStatus('disconnected');
+        };
+
+        ws.onerror = (error) => {
+          console.error('WSS connection error:', error);
+          setWalletConnectionStatus('disconnected');
+        };
+
+      } catch (error) {
+        console.error('Failed to connect to WSS:', error);
+        setWalletConnectionStatus('disconnected');
+      }
+    };
+
+    connectToWSS();
+
+    // Cleanup on unmount
+    return () => {
+      if (wssConnection) {
+        wssConnection.close();
+      }
+    };
   }, []);
 
   const tabs = [
@@ -201,6 +364,32 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     };
   }, [currentCoin, fetchRecentTrades]);
 
+  // Send wallet data request when both currentCoin and wallet connection are ready
+  React.useEffect(() => {
+    console.log('🔄 Wallet request check:', {
+      walletConnectionStatus,
+      currentCoin,
+      wssReady: wssConnection?.readyState === WebSocket.OPEN,
+      isNotSOL: currentCoin !== 'So11111111111111111111111111111112'
+    });
+
+    if (walletConnectionStatus === 'connected' && currentCoin && wssConnection && wssConnection.readyState === WebSocket.OPEN) {
+      // Only send if we haven't already sent a request (avoid duplicates)
+      if (currentCoin !== 'So11111111111111111111111111111112') { // Don't send for SOL
+        const request = {
+          type: 'wallet_data_request',
+          userId: operator?.userId?.toString() || 'unknown',
+          requestId: `req_${Date.now()}`,
+          currentCoin: currentCoin
+        };
+        console.log('📤 Sending wallet_data_request after coin update:', request);
+        wssConnection.send(JSON.stringify(request));
+      } else {
+        console.log('⏭️ Skipping wallet request for SOL token');
+      }
+    }
+  }, [currentCoin, walletConnectionStatus, wssConnection, operator?.userId]);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsResizing(true);
     e.preventDefault();
@@ -302,6 +491,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   };
 
   const fetchPairInfo = async (tokenAddress: string) => {
+    console.log('🔍 fetchPairInfo called for:', tokenAddress);
     if (tokenAddress === 'So11111111111111111111111111111112') {
       // For SOL, set basic info
       setPairInfo({
@@ -318,19 +508,24 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     try {
       // First resolve the pair address
       const pairAddress = await resolvePairAddress(tokenAddress);
+      console.log('🔗 Resolved pair address:', pairAddress);
       if (!pairAddress) {
         console.warn('Could not resolve pair address for pair info');
         return;
       }
 
-      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pair-info?pairAddress=${pairAddress}`, {
+      const url = `${MARKET_RELAY_API_URL}/api/pair-info?tokenAddress=${tokenAddress}`;
+      console.log('🌐 Fetching pair info from:', url);
+      const response = await fetch(url, {
         headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
       });
+      console.log('📡 Response status:', response.status);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('📦 Pair info data:', data);
       if (data.success && data.pairInfo) {
         const info = data.pairInfo;
         const normalized = {
@@ -344,7 +539,10 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
           feeVolumeSol: info.feeVolumeSol ?? info.fee_volume_sol ?? 0,
           pairAddress: info.pairAddress || info.pair_address || pairAddress
         };
+        console.log('✅ Setting pair info:', normalized);
         setPairInfo(normalized);
+      } else {
+        console.warn('❌ No pair info in response');
       }
     } catch (error) {
       console.warn('Failed to fetch pair info:', error);
@@ -457,37 +655,58 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   };
 
   const resolvePairAddress = async (tokenAddress: string) => {
+    console.log('🔍 resolvePairAddress called for:', tokenAddress);
     try {
-      // Check if we have it in market data first
+      // Check if we have it in market data first (with proper null checks)
       const allTokens = [
-        ...(marketData?.trending || []),
-        ...(marketData?.finalStretch || []),
-        ...(marketData?.migrated || []),
-        ...(marketData?.newMint || []),
+        ...(marketData?.trending ?? []),
+        ...(marketData?.finalStretch ?? []),
+        ...(marketData?.migrated ?? []),
+        ...(marketData?.newMint ?? []),
       ];
 
       const token = allTokens.find(t => t.tokenAddress === tokenAddress);
+      console.log('📊 Token found in market data:', token);
       if (token) {
         // For migrated tokens, migratedTo contains the pair address
         if (token.migratedTo) {
+          console.log('🔄 Using migratedTo:', token.migratedTo);
           return token.migratedTo;
         }
         // For other tokens, we might not have the pair address in the normalized data
         // Fall back to pump.fun API
       }
 
-      // Fallback to pump.fun API (proxied via market-relay to avoid CORS)
-      const response = await fetch(`${MARKET_RELAY_API_URL}/api/pumpfun/coins/${tokenAddress}`, {
-        headers: { 'X-API-Key': MARKET_RELAY_API_KEY }
-      });
+      // Fallback to direct pump.fun API (as requested)
+      const url = `https://frontend-api-v3.pump.fun/coins/${tokenAddress}`;
+      console.log('🌐 Fetching pair info from pump.fun:', url);
+
+      const response = await fetch(url);
+      console.log('📡 Pumpfun response status:', response.status);
       if (response.ok) {
-        const payload = await response.json();
-        const data = payload.data || payload;
-        return data.pump_swap_pool || data.bonding_curve;
+        const data = await response.json();
+        console.log('📦 Pumpfun data:', data);
+
+        // Priority: pump_swap_pool first (migrated tokens), then bonding_curve
+        let pairAddress = null;
+        if (data.pump_swap_pool) {
+          pairAddress = data.pump_swap_pool;
+          console.log('🔄 Using pump_swap_pool (migrated):', pairAddress);
+        } else if (data.bonding_curve) {
+          pairAddress = data.bonding_curve;
+          console.log('📈 Using bonding_curve:', pairAddress);
+        }
+
+        if (pairAddress) {
+          return pairAddress;
+        }
+      } else {
+        console.warn('❌ Pump.fun API returned status:', response.status);
       }
     } catch (error) {
       console.warn('Failed to resolve pair address:', error);
     }
+    console.log('❌ Could not resolve pair address');
     return null;
   };
 
@@ -509,6 +728,43 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       }
     } catch {
       // ignore detection errors
+    }
+  };
+
+  // Wallet connection management
+  const checkWalletConnection = async () => {
+    try {
+      const response = await fetch('/api/wallets/status');
+      if (response.ok) {
+        const data = await response.json();
+        setConnectedWallets(data.wallets || []);
+        setWalletConnectionStatus(data.connected ? 'connected' : 'disconnected');
+        if (data.wallets && data.wallets.length > 0 && selectedWallets.length === 0) {
+          setSelectedWallets([data.wallets[0].id]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check wallet connection:', error);
+      setWalletConnectionStatus('disconnected');
+    }
+  };
+
+  const connectWalletClient = async () => {
+    if (wssConnection && wssConnection.readyState === WebSocket.OPEN) {
+      setWalletConnectionStatus('connecting');
+
+      // Request wallet data from WSS server
+      const request = {
+        type: 'wallet_data_request',
+        userId: operator?.userId?.toString() || 'unknown',
+        requestId: `req_${Date.now()}`,
+        currentCoin: currentCoin
+      };
+      console.log('📤 Manual wallet_data_request:', request);
+      wssConnection.send(JSON.stringify(request));
+    } else {
+      console.log('WSS connection not available');
+      setWalletConnectionStatus('disconnected');
     }
   };
 
@@ -550,6 +806,67 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     return Number.isFinite(mc) ? mc : null;
   }, [currentPriceUsd, currentTokenInfo, tokenInfo]);
 
+  // Trade calculation helpers - use latest trade for price estimation
+  const latestTradePrice = React.useMemo(() => {
+    if (!recentTrades.length) return null;
+    const latestTrade = recentTrades[0];
+    // Price is SOL per token (how much SOL for 1 token)
+    return latestTrade.solAmount / latestTrade.tokenAmount;
+  }, [recentTrades]);
+
+  const calculateEstimatedTokens = React.useMemo(() => {
+    if (!latestTradePrice) return null;
+
+    if (tradeMode === 'buy') {
+      const solAmount = parseFloat(tradeSolAmount);
+      if (isNaN(solAmount) || solAmount <= 0) return null;
+
+      // Calculate tokens from SOL amount using latest trade price
+      const tokens = solAmount / latestTradePrice;
+      return tokens;
+    } else {
+      // For sell mode, we need wallet SPL balance
+      const selectedWallet = connectedWallets.find(w => selectedWallets.includes(w.id));
+      if (!selectedWallet || !selectedWallet.splBalance) return null;
+
+      const percentage = parseFloat(tradePercentage);
+      if (isNaN(percentage) || percentage <= 0 || percentage > 100) return null;
+
+      const tokensToSell = (selectedWallet.splBalance * percentage) / 100;
+      return tokensToSell;
+    }
+  }, [tradeMode, tradeSolAmount, tradePercentage, latestTradePrice, connectedWallets, selectedWallets]);
+
+  const validateTradeInputs = () => {
+    // Check if we have price data
+    if (!latestTradePrice) {
+      return { valid: false, error: 'Waiting for market data...' };
+    }
+
+    if (tradeMode === 'buy') {
+      const solAmount = parseFloat(tradeSolAmount);
+      if (isNaN(solAmount) || solAmount <= 0) {
+        return { valid: false, error: 'Please enter a valid SOL amount' };
+      }
+      if (solAmount < 0.000001) {
+        return { valid: false, error: 'Minimum trade amount is 0.000001 SOL' };
+      }
+    } else {
+      const percentage = parseFloat(tradePercentage);
+      if (isNaN(percentage) || percentage <= 0 || percentage > 100) {
+        return { valid: false, error: 'Please enter a valid percentage (1-100)' };
+      }
+
+      // Check if selected wallet has SPL balance for selling
+      const selectedWallet = connectedWallets.find(w => selectedWallets.includes(w.id));
+      if (!selectedWallet || !selectedWallet.splBalance || selectedWallet.splBalance <= 0) {
+        return { valid: false, error: 'No token balance to sell' };
+      }
+    }
+
+    return { valid: true, error: null };
+  };
+
   React.useEffect(() => {
     if (isResizing) {
       document.addEventListener('mousemove', handleMouseMove);
@@ -588,26 +905,27 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       <div className="border-b border-green-500/30 bg-black/70 backdrop-blur-sm">
         <div className="p-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="mt-1 w-2 h-2 rounded-full bg-green-300 shadow-[0_0_10px_rgba(74,222,128,0.6)] flex-shrink-0" />
-              {pairInfo?.tokenImage && (
-                <img
-                  src={pairInfo.tokenImage}
-                  alt={pairInfo.tokenName || pairInfo.tokenTicker}
-                  className="w-10 h-10 rounded border border-green-500/30 object-cover flex-shrink-0"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              )}
+             <div className="flex items-center gap-4 min-w-0">
+               <div className="flex items-center gap-1">
+                 {pairInfo?.tokenImage && (
+                   <img
+                     src={pairInfo.tokenImage}
+                     alt={pairInfo.tokenName || pairInfo.tokenTicker}
+                     className="w-12 h-12 rounded-lg border-2 border-green-500/40 object-cover flex-shrink-0 shadow-lg"
+                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                   />
+                 )}
+               </div>
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 min-w-0">
                   <div className="text-green-100 font-bold text-lg font-mono truncate">
                     {pairInfo
                       ? pairInfo.tokenName
                         ? `${pairInfo.tokenName} (${pairInfo.tokenTicker})`
-                        : pairInfo.tokenTicker || (currentCoin === 'So11111111111111111111111111111112' ? 'SOL' : `${currentCoin.slice(0, 8)}...`)
-                      : currentCoin === 'So11111111111111111111111111111112'
-                        ? 'SOL /USD'
-                        : `${currentCoin.slice(0, 8)}...`}
+                         : pairInfo.tokenTicker || (currentCoin === 'So11111111111111111111111111111112' ? 'SOL' : `${currentCoin.slice(0, 6)}...${currentCoin.slice(-6)}`)
+                       : currentCoin === 'So11111111111111111111111111111112'
+                         ? 'SOL /USD'
+                         : `${currentCoin.slice(0, 6)}...${currentCoin.slice(-6)}`}
                   </div>
                   <div className="px-3 py-1 rounded border border-green-500/40 bg-green-500/10 text-green-100 text-sm font-mono whitespace-nowrap">
                     {pairInfoLoading ? '...' : currentMarketCapUsd ? `$${formatCompact(currentMarketCapUsd, 2)}` : '$—'}
@@ -621,12 +939,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                       onClick={() => navigator.clipboard?.writeText(currentCoin)}
                       title="Copy token address"
                     >
-                      {currentCoin}
+                      {currentCoin.slice(0, 6)}...{currentCoin.slice(-6)}
                     </button>
                     <a
                       href={
                         protocolType === 'amm'
-                          ? `https://pump.fun/amm/${currentCoin}`
+                          ? `https://pump.fun/coin/${currentCoin}`
                           : `https://pump.fun/coin/${currentCoin}`
                       }
                       target="_blank"
@@ -668,8 +986,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   <span className={tokenInfo.dexPaid ? 'text-green-100 font-semibold' : 'text-red-300 font-semibold'}>
                     {tokenInfo.dexPaid ? '✓' : '✗'}
                   </span>
-                </span>
-              </div>
+                       </span>
+                    </div>
             )}
           </div>
         </div>
@@ -731,13 +1049,41 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                     </button>
                   ))}
                 </div>
-                {activeTab === 'trades' && (
-                  <div className="px-4">
-                    <span className={`text-xs font-mono ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
-                      {isConnected ? '● LIVE' : '● OFFLINE'}
-                    </span>
-                  </div>
-                )}
+                 {activeTab === 'trades' && (
+                   <div className="px-4">
+                     <span className={`text-xs font-mono ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
+                       {isConnected ? '● LIVE' : '● OFFLINE'}
+                     </span>
+                   </div>
+                 )}
+                 {activeTab === 'wallets' && (
+                   <div className="px-4">
+                      {walletConnectionStatus === 'connected' && connectedWallets.length > 0 && (
+                        <span className="ml-4 text-xs font-mono text-green-300/80">
+                          {(() => {
+                            const totalWallets = connectedWallets.length;
+                            const selectedCount = selectedWallets.length;
+                            const totalSol = connectedWallets.reduce((sum, wallet) => sum + (wallet.solBalance || 0), 0);
+                            const totalSpl = connectedWallets.reduce((sum, wallet) => sum + (wallet.splBalance || 0), 0);
+
+                            return `${totalWallets} wallet${totalWallets !== 1 ? 's' : ''}${selectedCount > 0 ? ` (${selectedCount} selected)` : ''} | ${totalSol.toFixed(2)} SOL | ${totalSpl > 0 ? formatCompact(totalSpl, 1) : '0'} SPL`;
+                          })()}
+                        </span>
+                      )}
+                       <span className={`ml-2 text-xs font-mono ${
+                         walletConnectionStatus === 'connected' && connectedWallets.length > 0 ? 'text-green-400' :
+                         walletConnectionStatus === 'connecting' ? 'text-yellow-400' :
+                         'text-red-400'
+                       }`}>
+                        ● {
+                          walletConnectionStatus === 'connected' && connectedWallets.length > 0 ? 'UNLOCKED' :
+                          walletConnectionStatus === 'connected' && connectedWallets.length === 0 ? 'LOCKED' :
+                          walletConnectionStatus === 'connecting' ? 'CONNECTING' :
+                          'DISCONNECTED'
+                        }
+                       </span>
+                    </div>
+                 )}
               </div>
             </div>
             
@@ -820,12 +1166,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                               <td className="px-3 py-2 whitespace-nowrap text-gray-200 hover:text-white cursor-pointer transition-colors">
                                 {trade.wallet.slice(0, 6)}...{trade.wallet.slice(-4)}
                               </td>
-                              <td className="px-3 py-2 whitespace-nowrap text-gray-200 hover:text-white cursor-pointer transition-colors">
-                                {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
+                               <td className="px-3 py-2 whitespace-nowrap text-gray-200 hover:text-white cursor-pointer transition-colors">
+                                 {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
+                               </td>
+                             </tr>
+                           ))}
+                           </tbody>
                       </table>
                     </div>
                   )}
@@ -847,14 +1193,14 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                Loading holders...
                              </div>
                            </div>
-                         ) : holders.length === 0 ? (
-                           <div className="p-4 text-center text-green-500/60">
-                             <div className="text-green-500/40 font-mono text-sm">
-                               {currentCoin === 'So11111111111111111111111111111112' ? 'Holder data not available for SOL' : 'No holder data available'}
-                             </div>
-                           </div>
-                         ) : (
-                           <table className="w-full text-xs font-mono">
+                          ) : holders.length === 0 ? (
+                            <div className="p-4 text-center text-green-500/60">
+                              <div className="text-green-500/40 font-mono text-sm">
+                                {currentCoin === 'So11111111111111111111111111111112' ? 'Holder data not available for SOL' : 'No holder data available'}
+                              </div>
+                            </div>
+                        ) : (
+                          <table className="w-full text-xs font-mono">
                              <thead className="bg-green-500/10 sticky top-0 z-10">
                                <tr className="text-left border-b border-green-500/20">
                                  <th className="px-3 py-2">Wallet</th>
@@ -979,33 +1325,134 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                      </div>
                    )}
                  </div>
-              ) : activeTab === 'wallets' ? (
-                <div className="relative flex-1 flex items-center justify-center border border-green-500/20 rounded bg-black/40">
-                  <div className="text-center text-green-500/60 py-8 space-y-3">
-                    <div className="text-green-300 font-mono text-lg mb-2">[ WALLETS ]</div>
-                    <button
-                      className="px-4 py-2 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
-                      onClick={() => {/* hook up wallet setup later */}}
-                    >
-                      Setup Wallet
-                    </button>
-                  </div>
-                  {showBetaOverlay && (
-                    <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm border border-green-500/30 rounded flex flex-col items-center justify-center p-4 text-center space-y-3">
-                      <div className="text-green-50 font-mono text-base">Public beta opening soon</div>
-                      <div className="text-green-100/90 text-xs font-mono">Register now to unlock wallet tools.</div>
-                      <a
-                        href="https://t.me/a_trade_dot_fun_bot"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-4 py-2 rounded border border-green-300 bg-green-500/30 text-green-50 text-sm font-mono hover:bg-green-500/40"
-                      >
-                        Join Beta
-                      </a>
+                ) : activeTab === 'wallets' ? (
+                  <div className="flex-1 flex flex-col min-h-0">
+                    {/* Wallets Table */}
+                    <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[60vh] p-0">
+                      {connectedWallets.length === 0 ? (
+                        <div className="text-center text-green-500/60 py-12 space-y-3">
+                          <div className="text-green-300 font-mono text-lg mb-2">[ NO WALLETS ]</div>
+                          <div className="text-green-500/40 font-mono text-sm space-y-2 max-w-md mx-auto">
+                            <p>Connect your wallet client to see your wallets here.</p>
+                            <p>Go to Settings → Wallet Client Connection to get started.</p>
+                          </div>
+                          <a
+                            href="/settings"
+                            className="inline-block px-4 py-2 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
+                          >
+                            Open Settings
+                           </a>
+                         </div>
+                          ) : (
+                             <table className="w-full text-xs font-mono">
+                               <thead className="bg-green-500/10 sticky top-0 z-10 backdrop-blur-sm">
+                                 <tr className="text-left border-b border-green-500/30">
+                                   <th className="px-3 py-2">Name</th>
+                                   <th className="px-3 py-2">Address</th>
+                                   <th className="px-3 py-2">SOL Balance</th>
+                                   <th className="px-3 py-2">SPL Balance</th>
+                                   <th className="px-3 py-2">Actions</th>
+                                 </tr>
+                               </thead>
+                               <tbody className="divide-y divide-green-500/20">
+                             {connectedWallets.map((wallet) => {
+                               const isSelected = selectedWallets.includes(wallet.id);
+                               return (
+                                 <tr
+                                   key={wallet.id}
+                                   onClick={() => {
+                                     setSelectedWallets(prev =>
+                                       isSelected
+                                         ? prev.filter(id => id !== wallet.id)
+                                         : [...prev, wallet.id]
+                                     );
+                                   }}
+                                    className={`cursor-pointer transition-colors hover:bg-white/5 ${
+                                      isSelected ? 'bg-white/10 border-l-3 border-green-400 shadow-sm' : ''
+                                    }`}
+                                  >
+                                    <td className="px-3 py-2 whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        <span className={isSelected ? "text-green-300" : "text-green-400"}>
+                                          {isSelected ? "✓" : "🔑"}
+                                        </span>
+                                        <span className={`font-semibold ${isSelected ? "text-white" : "text-green-100"}`}>
+                                          {wallet.name}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-white font-mono">
+                                      <span
+                                        className="cursor-pointer hover:text-green-300 transition-colors select-none"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard.writeText(wallet.publicKey);
+                                          showToast('Wallet address copied!');
+                                        }}
+                                        title="Click to copy wallet address"
+                                      >
+                                        {wallet.publicKey.slice(0, 8)}...{wallet.publicKey.slice(-8)}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-green-200 font-medium">
+                                      {wallet.solBalance !== undefined ? `${wallet.solBalance.toFixed(4)} SOL` : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-green-200 font-medium">
+                                      {wallet.splBalance ? `${formatCompact(wallet.splBalance, 1)}` : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap">
+                                        <div className="flex gap-1">
+                                          <button
+                                            className="px-2 py-1 text-xs font-mono bg-green-500/20 text-green-100 border border-green-500/40 rounded hover:bg-green-500/30 transition-colors"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
+                                              setTradeMode('buy');
+                                              // Scroll to trading controls
+                                              document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
+                                            }}
+                                            title="Buy tokens with this wallet"
+                                          >
+                                            BUY
+                                          </button>
+                                          <button
+                                            className="px-2 py-1 text-xs font-mono bg-red-500/20 text-red-100 border border-red-500/40 rounded hover:bg-red-500/30 transition-colors"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
+                                              setTradeMode('sell');
+                                              // Scroll to trading controls
+                                              document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
+                                            }}
+                                            title="Sell tokens with this wallet"
+                                          >
+                                            SELL
+                                          </button>
+                                          <button
+                                            className="px-2 py-1 text-xs font-mono bg-red-500/30 text-red-100 border border-red-500/50 rounded hover:bg-red-500/40 transition-colors"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
+                                              setTradeMode('sell');
+                                              setTradeTokenAmount(wallet.splBalance?.toString() || '0');
+                                              // Scroll to trading controls
+                                              document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
+                                            }}
+                                            title="Sell ALL tokens (Nuke)"
+                                          >
+                                            ☢︎
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          )}
                     </div>
-                  )}
-                </div>
-              ) : (
+                  </div>
+                ) : (
                 <div className="text-center text-green-500/60 py-8">
                   <div className="text-green-300 font-mono text-lg mb-2">[ {(activeTab as string).toUpperCase()} ]</div>
                   <div className="text-green-500/40 font-mono text-sm">Content coming soon</div>
@@ -1027,13 +1474,20 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
         {/* Right Panel */}
         <div
-          className="bg-black/20 overflow-hidden flex"
+          className="bg-black/20 overflow-y-auto flex"
           style={{ width: `${rightPanelWidth}%` }}
         >
           <div className="p-4 space-y-4 relative flex-1">
-            <div className="border border-green-500/20 rounded-lg bg-black/40 p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-green-200 font-mono font-semibold">Quick Trade</span>
+                {selectedWallets.length > 0 && (
+                  <div className="text-xs text-green-300/80 font-mono mb-2 p-2 bg-green-500/5 rounded border border-green-500/20">
+                    Selected wallets: {selectedWallets.length === 1
+                      ? connectedWallets.find(w => w.id === selectedWallets[0])?.name || 'Unknown Wallet'
+                      : `${selectedWallets.length} wallets selected`
+                    }
+                  </div>
+                )}
+               <div className="flex items-center justify-between">
+                 <span className="text-green-200 font-mono font-semibold">Quick Trade</span>
                 <div className="flex gap-2 text-xs font-mono">
                   <button
                     className={`px-2 py-1 rounded border ${tradeMode === 'buy' ? 'bg-green-500/20 border-green-400 text-green-100' : 'border-green-500/30 text-green-300 hover:bg-green-500/10'}`}
@@ -1050,62 +1504,275 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                 </div>
               </div>
 
-              <div className="space-y-3 text-sm font-mono text-green-100">
-                <div className="flex flex-col gap-2">
-                  <label className="text-green-300/80">Amount (SOL)</label>
-                  <input
-                    value={tradeSolAmount}
-                    onChange={(e) => setTradeSolAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
-                  />
+                <div className="space-y-3 text-sm font-mono text-green-100">
+                  {tradeMode === 'buy' ? (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-green-300/80">Amount (SOL)</label>
+                      <input
+                        value={tradeSolAmount}
+                        onChange={(e) => setTradeSolAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-green-300/80">Percentage (%)</label>
+                      <input
+                        value={tradePercentage}
+                        onChange={(e) => setTradePercentage(e.target.value)}
+                        placeholder="100"
+                        className="w-full rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Trade Settings */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 relative">
+                        <div
+                          className="text-green-300/80 flex items-center cursor-help"
+                          onMouseEnter={() => setShowSlippageTooltip(true)}
+                          onMouseLeave={() => setShowSlippageTooltip(false)}
+                        >
+                          {CustomIcons.slippage}
+                        </div>
+                        {showSlippageTooltip && (
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-black/90 text-green-100 text-xs rounded border border-green-500/30 whitespace-nowrap z-10">
+                            Slippage Tolerance
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-2 border-transparent border-t-green-500/30"></div>
+                          </div>
+                        )}
+                        <select
+                          value={slippage}
+                          onChange={(e) => setSlippage(e.target.value)}
+                          className="rounded border border-green-500/30 bg-black/60 px-2 py-1 text-green-100 focus:outline-none focus:border-green-400 text-xs"
+                        >
+                          <option value="0.5">0.5%</option>
+                          <option value="1">1%</option>
+                          <option value="2">2%</option>
+                          <option value="5">5%</option>
+                          <option value="10">10%</option>
+                          <option value="15">15%</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="useJito"
+                          checked={useJito}
+                          onChange={(e) => setUseJito(e.target.checked)}
+                          className="w-3 h-3 rounded border border-green-500/30 bg-black/60 text-green-400 focus:ring-green-400 focus:ring-2"
+                        />
+                        <label htmlFor="useJito" className="text-green-300/80 text-xs font-mono cursor-pointer">
+                          Jito
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                 {/* Trade Summary */}
+                 {(tradeMode === 'buy' && tradeSolAmount) || (tradeMode === 'sell' && tradePercentage) ? (
+                   <div className="text-xs text-green-300/70">
+                     <div className="flex items-center gap-1">
+                       <span>Tokens:</span>
+                       <span>~{formatCompact(calculateEstimatedTokens || 0, 2)} {pairInfo?.tokenTicker || 'tokens'}</span>
+                       {recentTrades.length > 0 && (
+                         <span className="text-green-400/60 text-[10px]">● LIVE</span>
+                       )}
+                     </div>
+                    </div>
+                  ) : null}
+
+                 {/* Validation Error */}
+                 {(() => {
+                   const validation = validateTradeInputs();
+                   if (!validation.valid && (tradeSolAmount || tradePercentage)) {
+                     return (
+                       <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+                         {validation.error}
+                       </div>
+                     );
+                   }
+                   return null;
+                 })()}
+
+                 <button
+                   className={`w-full py-2 rounded border font-semibold transition-colors ${
+                     tradeMode === 'buy'
+                       ? 'bg-green-500/20 border-green-400 text-green-100 hover:bg-green-500/30'
+                       : 'bg-red-500/20 border-red-400 text-red-100 hover:bg-red-500/30'
+                   }`}
+                   onClick={() => {/* hook up actual trade action later */}}
+                   disabled={selectedWallets.length === 0 || !validateTradeInputs().valid}
+                 >
+                   {selectedWallets.length === 0
+                     ? 'Select wallet(s) to trade'
+                     : tradeMode === 'buy'
+                       ? `Buy ${tradeSolAmount || '0'} SOL`
+                       : `Sell ${tradePercentage || '0'}%`
+                   }
+                 </button>
+                 <div className="text-[11px] text-green-500/60">
+                   Preview. Wire up execution flow to light wss when ready.
+                 </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-green-300/80">Amount (Token)</label>
-                  <input
-                    value={tradeTokenAmount}
-                    onChange={(e) => setTradeTokenAmount(e.target.value)}
-                    placeholder="0"
-                    className="w-full rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
-                  />
-                </div>
-                <div className="text-xs text-green-300/70">
-                  Price (est): {currentPriceUsd ? `$${currentPriceUsd.toFixed(6)}` : '—'}
-                </div>
-                <button
-                  className={`w-full py-2 rounded border font-semibold transition-colors ${
-                    tradeMode === 'buy'
-                      ? 'bg-green-500/20 border-green-400 text-green-100 hover:bg-green-500/30'
-                      : 'bg-red-500/20 border-red-400 text-red-100 hover:bg-red-500/30'
-                  }`}
-                  onClick={() => {/* hook up actual trade action later */}}
-                >
-                  {tradeMode === 'buy' ? 'Confirm Buy' : 'Confirm Sell'}
-                </button>
-                <div className="text-[11px] text-green-500/60">
-                  Quick trade is a preview. Wire up execution flow to relay when ready.
-                </div>
-              </div>
-            </div>
-            {showBetaOverlay && (
-              <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm border border-green-500/30 rounded-lg flex flex-col items-center justify-center p-4 text-center space-y-3">
-                <div className="text-green-50 font-mono text-base">Early access</div>
-                <div className="text-green-100/90 text-xs font-mono">Register to unlock trading controls.</div>
-                <a
-                  href="https://t.me/a_trade_dot_fun_bot"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-4 py-2 rounded border border-green-300 bg-green-500/30 text-green-50 text-sm font-mono hover:bg-green-500/40"
-                >
-                  Join Beta
-                </a>
-              </div>
-            )}
+
+             {/* Advanced & Extra Section - Separate Container */}
+             <div className="border border-green-500/20 rounded-lg bg-black/40 p-4 space-y-4 mt-4">
+               <div className="flex justify-center mb-2">
+                 <button className="w-full py-1.5 rounded border-2 border-red-500/50 bg-red-500/10 hover:bg-red-500/20 hover:border-red-400 text-red-300 font-mono font-bold text-sm transition-all duration-200 hover:shadow-lg hover:shadow-red-500/20">
+                   ☠︎ NUKE ☢︎
+                 </button>
+               </div>
+                <div className="grid grid-cols-3 gap-2">
+                   <button
+                   className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                   onClick={() => setShowLadderBuyModal(true)}
+                 >
+                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
+                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                         <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                         <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                       </svg>
+                     </div>
+                     <span className="text-green-100 text-xs font-mono font-medium">Ladder Buy</span>
+                 </button>
+
+                    <button
+                      className="p-3 rounded border border-red-500/30 bg-black/40 hover:bg-red-500/10 hover:border-red-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                      onClick={() => setShowLadderSellModal(true)}
+                    >
+                      <div className="text-red-300/80 group-hover:text-red-200 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                          <path d="M21 6H3M21 10H7M21 14H11M21 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          <path d="M3 12l3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <span className="text-red-100 text-xs font-mono font-medium">Ladder Sell</span>
+                    </button>
+
+                    <button
+                      className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                      onClick={() => setShowBundleBuyModal(true)}
+                    >
+                      <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                          <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+                          <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2"/>
+                          <circle cx="9" cy="9" r="1" fill="currentColor"/>
+                          <circle cx="15" cy="9" r="1" fill="currentColor"/>
+                          <circle cx="9" cy="15" r="1" fill="currentColor"/>
+                          <circle cx="15" cy="15" r="1" fill="currentColor"/>
+                        </svg>
+                      </div>
+                      <span className="text-green-100 text-xs font-mono font-medium">Bundle Buy</span>
+                    </button>
+
+                   <button className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group">
+                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
+                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                         <path d="M12 2a10 10 0 0 1 0 20 5 5 0 0 0 0-10 5 5 0 0 0 0-10z" fill="currentColor"/>
+                         <circle cx="12" cy="7" r="1.5" fill="white"/>
+                         <circle cx="12" cy="17" r="1.5" fill="currentColor"/>
+                       </svg>
+                     </div>
+                     <span className="text-green-100 text-xs font-mono font-medium">Distribute SOL</span>
+                   </button>
+
+                   <button className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group">
+                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
+                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                         <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2"/>
+                         <path d="M12 6V2M12 22v-4M6 12H2M22 12h-4M8.46 8.46l-2.83-2.83M15.54 15.54l2.83 2.83M8.46 15.54l-2.83 2.83M15.54 8.46l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                       </svg>
+                     </div>
+                     <span className="text-green-100 text-xs font-mono font-medium">Gather SOL</span>
+                   </button>
+
+                   <button className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group">
+                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
+                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                         <circle cx="8.5" cy="9.5" r="1.2" fill="currentColor"/>
+                         <circle cx="15.5" cy="9.5" r="1.2" fill="currentColor"/>
+                         <path d="M7.5 14.5c1.5 1.5 4.5 1.5 6 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                         <circle cx="12" cy="16" r="0.5" fill="currentColor"/>
+                       </svg>
+                     </div>
+                     <span className="text-green-100 text-xs font-mono font-medium">Warm Up</span>
+                   </button>
+               </div>
+             </div>
+
+
+
+               {/* Ladder Buy Modal */}
+               <LadderBuyModal
+                 isOpen={showLadderBuyModal}
+                 onClose={() => setShowLadderBuyModal(false)}
+                 selectedWallets={selectedWallets}
+                 connectedWallets={connectedWallets}
+                 onToast={showToast}
+                 useJito={useJito}
+                 setUseJito={setUseJito}
+               />
+
+                {/* Ladder Sell Modal */}
+                <LadderSellModal
+                  isOpen={showLadderSellModal}
+                  onClose={() => setShowLadderSellModal(false)}
+                  selectedWallets={selectedWallets}
+                  connectedWallets={connectedWallets}
+                  onToast={showToast}
+                  useJito={useJito}
+                  setUseJito={setUseJito}
+                />
+
+                {/* Bundle Buy Modal */}
+                <BundleBuyModal
+                  isOpen={showBundleBuyModal}
+                  onClose={() => setShowBundleBuyModal(false)}
+                  selectedWallets={selectedWallets}
+                  connectedWallets={connectedWallets}
+                  onToast={showToast}
+                  useJito={useJito}
+                  setUseJito={setUseJito}
+                />
+
+              {showBetaOverlay && (
+               <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm border border-green-500/30 rounded-lg flex flex-col items-center justify-center p-4 text-center space-y-3">
+                 <div className="text-green-50 font-mono text-base">Early access</div>
+                 <div className="text-green-100/90 text-xs font-mono">Register to unlock trading controls.</div>
+                 <a
+                   href="https://t.me/a_trade_dot_fun_bot"
+                   target="_blank"
+                   rel="noreferrer"
+                   className="px-4 py-2 rounded border border-green-300 bg-green-500/30 text-green-50 text-sm font-mono hover:bg-green-500/40"
+                 >
+                   Join Beta
+                 </a>
+               </div>
+             )}
           </div>
         </div>
       </div>
 
-
+       {/* Toast Notification */}
+       {toastMessage && (
+         <div className={`fixed bottom-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-500 ease-out ${
+           showLadderBuyModal || showLadderSellModal ? 'left-4' : 'right-4'
+         }`}>
+          <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <span className="text-green-200/80">✓</span>
+              <span>{toastMessage}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

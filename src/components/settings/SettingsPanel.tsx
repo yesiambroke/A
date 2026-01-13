@@ -24,6 +24,9 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
   const [verifying, setVerifying] = React.useState(false);
   const [recoveryKey, setRecoveryKey] = React.useState<string | null>(null);
   const [countdown, setCountdown] = React.useState<number | null>(null);
+  const [authKey, setAuthKey] = React.useState<string | null>(null);
+  const [authKeyExpires, setAuthKeyExpires] = React.useState<number | null>(null);
+  const [generatingKey, setGeneratingKey] = React.useState(false);
 
 
 
@@ -125,6 +128,74 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
       setVerifying(false);
     }
   };
+
+  // Wallet Client Connection Functions
+  const generateAuthKey = async () => {
+    try {
+      setGeneratingKey(true);
+      const res = await fetch("/api/settings/generate-auth-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to generate auth key");
+      }
+      setAuthKey(data.authKey);
+      setAuthKeyExpires(data.expiresAt);
+    } catch (err) {
+      console.error("Generate auth key error:", err);
+      alert("Failed to generate auth key: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setGeneratingKey(false);
+    }
+  };
+
+  const revokeAuthKey = async () => {
+    if (!confirm("Are you sure you want to revoke the current auth key? Your wallet client will be disconnected.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/revoke-auth-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to revoke auth key");
+      }
+      setAuthKey(null);
+      setAuthKeyExpires(null);
+    } catch (err) {
+      console.error("Revoke auth key error:", err);
+      alert("Failed to revoke auth key: " + (err instanceof Error ? err.message : "Unknown error"));
+    }
+  };
+
+  const copyAuthKey = () => {
+    if (authKey) {
+      navigator.clipboard.writeText(authKey);
+      alert("Auth key copied to clipboard!");
+    }
+  };
+
+  // Load auth key status on mount
+  React.useEffect(() => {
+    const loadAuthKeyStatus = async () => {
+      try {
+        const res = await fetch("/api/settings/auth-key-status");
+        const data = await res.json();
+        if (data?.success && data.authKey) {
+          setAuthKey(data.authKey);
+          setAuthKeyExpires(data.expiresAt);
+        }
+      } catch (err) {
+        console.error("Load auth key status error:", err);
+      }
+    };
+    loadAuthKeyStatus();
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -422,6 +493,81 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
             </div>
           </div>
         )}
+
+        <div className="border border-green-500/40 bg-black/85 p-4 space-y-3">
+          <p className="text-xs uppercase tracking-[0.3em] text-green-400/70">Wallet Client Connection</p>
+          <div className="space-y-4">
+            <div className="text-sm text-green-300">
+              Connect your wallet client to enable secure trading. Generate an authentication key and enter it in your wallet client.
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border border-green-500/40 px-3 py-2">
+                <span className="text-green-300 text-sm">Connection Status</span>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${authKey ? 'bg-green-400' : 'bg-red-400'}`} />
+                  <span className="text-green-200 font-mono text-xs">
+                    {authKey ? 'AUTH KEY ACTIVE' : 'NO AUTH KEY'}
+                  </span>
+                </div>
+              </div>
+
+              {authKey && (
+                <div className="border border-green-500/40 bg-green-500/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-green-300 text-sm font-semibold">Active Auth Key</span>
+                    <span className="text-green-400/70 text-xs">
+                      Expires: {authKeyExpires ? new Date(authKeyExpires).toLocaleString() : 'Unknown'}
+                    </span>
+                  </div>
+                  <div className="font-mono text-green-200 bg-black/50 p-2 rounded border border-green-500/30 text-sm break-all">
+                    {authKey}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copyAuthKey}
+                      className="px-3 py-1 border border-green-500/40 rounded bg-green-500/10 text-green-100 hover:bg-green-500/20 text-xs"
+                    >
+                      Copy Key
+                    </button>
+                    <button
+                      onClick={revokeAuthKey}
+                      className="px-3 py-1 border border-red-500/40 rounded bg-red-500/10 text-red-100 hover:bg-red-500/20 text-xs"
+                    >
+                      Revoke Key
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!authKey && (
+                <div className="text-center space-y-3">
+                  <p className="text-green-500/60 text-sm">
+                    No active authentication key. Generate one to connect your wallet client.
+                  </p>
+                  <button
+                    onClick={generateAuthKey}
+                    disabled={generatingKey}
+                    className="px-4 py-2 border border-green-500/40 rounded bg-green-500/10 text-green-100 hover:bg-green-500/20 disabled:opacity-50"
+                  >
+                    {generatingKey ? 'Generating...' : 'Generate Auth Key'}
+                  </button>
+                </div>
+              )}
+
+              <div className="text-[11px] text-green-500/80 space-y-1">
+                <p><strong>How to connect:</strong></p>
+                <ol className="list-decimal list-inside space-y-1 ml-2">
+                  <li>Generate an auth key above</li>
+                  <li>Copy the key to your clipboard</li>
+                  <li>Open your wallet client application</li>
+                  <li>Enter the auth key in the connection settings</li>
+                  <li>Your wallets will appear in the trading terminal</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

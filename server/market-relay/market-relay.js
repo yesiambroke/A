@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const axios = require('axios');
 const https = require('https');
 const fetch = require('node-fetch');
 require('dotenv').config({ path: '../.env.local' });
@@ -27,18 +28,15 @@ class MarketRelayServer {
     // OTP flow state (in-memory, cleared on restart)
     this.otpState = new Map(); // email -> { otpJwtToken, timestamp }
     
-    // Market data cache (now includes trending)
+    // Market data cache (trending separate, pulse categories use registry)
     this.marketData = {
       trending: [],
-      finalStretch: [],
-      migrated: [],
-      newMint: [],
       solPrice: null,
       lastUpdate: null
     };
 
     // Raw sample logging (keeps only a few samples per room)
-    this.sampleLogCounts = { new_pairs: 0, update_pulse_v2: 0 };
+    this.sampleLogCounts = { new_pairs: 0, update_pulse_v2: 0, pulse_v2_snapshot: 0, pulse_v2_delta: 0 };
     this.sampleLogPath = 'axiom-raw-samples.log';
 
     // Trade subscriptions: client -> Set of tokenMints
@@ -47,6 +45,11 @@ class MarketRelayServer {
     this.lpCache = new Map();
     // Active trade subscriptions: lpAddress -> Set of clients
     this.activeTradeSubscriptions = new Map();
+    // Pulse v2 connector (primary feed)
+    this.pulseConnector = null;
+    this.pulseData = { snapshot: null, lastDelta: null };
+    this.pulseBaseMap = new Map(); // pairAddress -> base metadata from snapshot
+    this.pulseSnapshotPath = 'pulse-v2-last-snapshot.json';
     
     // Setup Express app
     this.setupExpress();
@@ -100,18 +103,18 @@ class MarketRelayServer {
       if (!tokenAddress) {
         return res.status(400).json({ success: false, error: 'tokenAddress is required' });
       }
-      try {
-        const upstream = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenAddress}`);
-        if (!upstream.ok) {
-          const body = await upstream.text();
-          return res.status(upstream.status).json({ success: false, error: body.substring(0, 200) });
-        }
-        const data = await upstream.json();
-        return res.json({ success: true, data });
-      } catch (err) {
-        console.error('❌ pump.fun proxy error:', err.message);
-        return res.status(500).json({ success: false, error: 'Proxy request failed' });
-      }
+       try {
+         const upstream = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenAddress}`);
+         if (!upstream.ok) {
+           const body = await upstream.text();
+           return res.status(upstream.status).json({ success: false, error: body.substring(0, 200) });
+         }
+         const data = await upstream.json();
+         return res.json({ success: true, data });
+       } catch (err) {
+         console.error('❌ pump.fun proxy error:', err.message);
+         return res.status(500).json({ success: false, error: 'Proxy request failed' });
+       }
     });
     
     // Health check endpoint
@@ -277,13 +280,13 @@ class MarketRelayServer {
 
     // Fetch pair/token info for a token
     this.app.get('/api/pair-info', async (req, res) => {
-      const pairAddress = req.query.pairAddress;
-      if (!pairAddress) {
-        return res.status(400).json({ success: false, error: 'pairAddress is required' });
+      const tokenAddress = req.query.tokenAddress;
+      if (!tokenAddress) {
+        return res.status(400).json({ success: false, error: 'tokenAddress is required' });
       }
 
       try {
-        const pairInfo = await this.fetchPairInfo(pairAddress);
+        const pairInfo = await this.fetchPairInfo(tokenAddress);
         return res.json({ success: true, pairInfo });
       } catch (error) {
         console.error('❌ Failed to fetch pair info:', error.message);
@@ -415,14 +418,14 @@ class MarketRelayServer {
       
       this.clients.add(ws);
       
-      // Send initial market data (Trending, Final Stretch, Migrated and New Mint, top 20 each)
+      // Send initial market data (Trending, Final Stretch, Migrated and New Mint, top 50 each)
       ws.send(JSON.stringify({
         type: 'market_data',
         data: {
-          trending: this.marketData.trending.slice(0, 20),
-          finalStretch: this.marketData.finalStretch.slice(0, 20),
-          migrated: this.marketData.migrated.slice(0, 20),
-          newMint: this.marketData.newMint.slice(0, 20),
+          trending: this.marketData.trending.slice(0, 50),
+          finalStretch: this.normalizer.tokenRegistry.getTopCategoryTokens('finalStretch', 50),
+          migrated: this.normalizer.tokenRegistry.getTopCategoryTokens('migrated', 50),
+          newMint: this.normalizer.tokenRegistry.getTopCategoryTokens('newMint', 50),
           solPrice: this.marketData.solPrice,
           lastUpdate: this.marketData.lastUpdate
         }
@@ -507,13 +510,14 @@ class MarketRelayServer {
 
       debugLog('📡 [DEBUG] fetchInitialTrendingTokens called');
 
-      // Ensure we have valid authentication
+      // Refresh/validate tokens before hitting Axiom API
       if (!await this.authManager.ensureValidAuthentication()) {
         debugLog('⚠️  [ERROR] Cannot fetch trending tokens - authentication required');
         return false;
       }
 
-      const url = 'https://api9.axiom.trade/meme-trending?timePeriod=24h';
+      // Ensure we have valid authentication
+      const url = 'https://api-asia.axiom.trade/meme-trending?timePeriod=24h';
       debugLog('🔗 [DEBUG] API URL: ' + url);
 
       // Use existing auth session
@@ -582,9 +586,9 @@ class MarketRelayServer {
           return false;
         }
 
-        console.log(`📥 [DEBUG] Received ${trendingData.length} trending tokens from API`);
+        //console.log(`📥 [DEBUG] Received ${trendingData.length} trending tokens from API`);
         if (trendingData.length > 0) {
-          console.log('📥 [DEBUG] First token sample:', JSON.stringify(trendingData[0]).substring(0, 200));
+          //console.log('📥 [DEBUG] First token sample:', JSON.stringify(trendingData[0]).substring(0, 200));
         }
       } catch (error) {
         clearTimeout(timeoutId);
@@ -677,7 +681,7 @@ class MarketRelayServer {
     }
 
     const tokens = this.authManager.getTokens();
-    const url = `https://api-asia.axiom.trade/transactions-feed?pairAddress=${lpAddress}&orderBy=DESC&makerAddress=`;
+    const url = `https://api-asia.axiom.trade/transactions-feed?pairAddress=${lpAddress}&orderBy=DESC&makerAddress=&v=2`;
     const headers = {
       'accept': 'application/json, text/plain, */*',
       'accept-language': 'en-US,en;q=0.9',
@@ -687,7 +691,7 @@ class MarketRelayServer {
       'pragma': 'no-cache',
       'referer': 'https://axiom.trade/',
       'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-      'x-target-host': 'api8.axiom.trade'
+      'x-target-host': 'api.axiom.trade'
     };
 
     const response = await fetch(url, { headers });
@@ -707,8 +711,11 @@ class MarketRelayServer {
   }
 
   async fetchHolderData(pairAddress) {
-    if (!await this.authManager.ensureValidAuthentication()) {
-      throw new Error('Authentication required to fetch holder data');
+    try {
+      await this.authManager.refreshAccessToken();
+    } catch (e) {
+      console.error('❌ Failed to refresh access token for holder data:', e.message);
+      throw new Error('Authentication failed');
     }
 
     const tokens = this.authManager.getTokens();
@@ -722,7 +729,7 @@ class MarketRelayServer {
       'pragma': 'no-cache',
       'referer': 'https://axiom.trade/',
       'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-      'x-target-host': 'api10.axiom.trade'
+      'x-target-host': 'api.axiom.trade'
     };
 
     const response = await fetch(url, { headers });
@@ -764,12 +771,15 @@ class MarketRelayServer {
   }
 
   async fetchTokenInfo(pairAddress) {
-    if (!await this.authManager.ensureValidAuthentication()) {
-      throw new Error('Authentication required to fetch token info');
+    try {
+      await this.authManager.refreshAccessToken();
+    } catch (e) {
+      console.error('❌ Failed to refresh access token for token info:', e.message);
+      throw new Error('Authentication failed');
     }
 
     const tokens = this.authManager.getTokens();
-    const url = `https://api-asia.axiom.trade/token-info?pairAddress=${pairAddress}`;
+    const url = `https://api-asia.axiom.trade/token-info?pairAddress=${pairAddress}&v=2`;
     const headers = {
       'accept': 'application/json, text/plain, */*',
       'accept-language': 'en-US,en;q=0.9',
@@ -779,7 +789,7 @@ class MarketRelayServer {
       'pragma': 'no-cache',
       'referer': 'https://axiom.trade/',
       'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-      'x-target-host': 'api3.axiom.trade'
+      'x-target-host': 'api.axiom.trade'
     };
 
     const response = await fetch(url, { headers });
@@ -806,42 +816,43 @@ class MarketRelayServer {
     return { normalized, raw: data };
   }
 
-  async fetchPairInfo(pairAddress) {
-    if (!await this.authManager.ensureValidAuthentication()) {
-      throw new Error('Authentication required to fetch pair info');
-    }
+  async fetchPairInfo(tokenAddress) {
+    // Use pump.fun API instead of axiom for pair info (no auth required)
+    const url = `https://frontend-api-v3.pump.fun/coins/${tokenAddress}`;
+    console.log('🌐 Fetching pair info from pump.fun:', url);
 
-    const tokens = this.authManager.getTokens();
-    const url = `https://api-asia.axiom.trade/pair-info?pairAddress=${pairAddress}`;
-    const headers = {
-      'accept': 'application/json, text/plain, */*',
-      'accept-language': 'en-US,en;q=0.9',
-      'cache-control': 'no-cache',
-      'cookie': `auth-refresh-token=${tokens.refresh_token}; auth-access-token=${tokens.access_token}`,
-      'origin': 'https://axiom.trade',
-      'pragma': 'no-cache',
-      'referer': 'https://axiom.trade/',
-      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-      'x-target-host': 'api9.axiom.trade'
-    };
-
-    const response = await fetch(url, { headers });
+    const response = await fetch(url);
     if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Pair Info HTTP ${response.status}: ${body.substring(0, 200)}`);
+      throw new Error(`HTTP ${response.status}`);
     }
 
     const data = await response.json();
-    return data;
+    console.log('📦 Pump.fun pair info:', data);
+
+    // Normalize to match expected format
+    return {
+      tokenName: data.name,
+      tokenTicker: data.symbol,
+      tokenImage: data.image_uri,
+      tokenDecimals: data.decimals || 6,
+      marketCapSol: data.market_cap || 0,
+      supply: data.total_supply/1000000 || 0,
+      dexPaid: data.dex_paid || false,
+      feeVolumeSol: data.fee_volume || 0,
+      pairAddress: data.bonding_curve || data.pump_swap_pool || tokenAddress
+    };
   }
 
   async fetchTopTraders(pairAddress) {
-    if (!await this.authManager.ensureValidAuthentication()) {
-      throw new Error('Authentication required to fetch top traders');
+    try {
+      await this.authManager.refreshAccessToken();
+    } catch (e) {
+      console.error('❌ Failed to refresh access token for top traders:', e.message);
+      throw new Error('Authentication failed');
     }
 
     const tokens = this.authManager.getTokens();
-    const url = `https://api-asia.axiom.trade/top-traders-v3?pairAddress=${pairAddress}&onlyTrackedWallets=false`;
+    const url = `https://api-asia.axiom.trade/top-traders-v3?pairAddress=${pairAddress}&onlyTrackedWallets=false&v=2`;
     const headers = {
       'accept': 'application/json, text/plain, */*',
       'accept-language': 'en-US,en;q=0.9',
@@ -851,7 +862,7 @@ class MarketRelayServer {
       'pragma': 'no-cache',
       'referer': 'https://axiom.trade/',
       'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-      'x-target-host': 'api9.axiom.trade'
+      'x-target-host': 'api.axiom.trade'
     };
 
     const response = await fetch(url, { headers });
@@ -904,12 +915,12 @@ class MarketRelayServer {
       return this.lpCache.get(tokenMint);
     }
 
-    // Check existing market data for the token
+    // Check existing market data for the token (with proper null checks)
     const allTokens = [
-      ...this.marketData.trending,
-      ...this.marketData.finalStretch,
-      ...this.marketData.migrated,
-      ...this.marketData.newMint
+      ...(this.marketData.trending ?? []),
+      ...(this.marketData.finalStretch ?? []),
+      ...(this.marketData.migrated ?? []),
+      ...(this.marketData.newMint ?? [])
     ];
 
     const tokenData = allTokens.find(t => t.tokenAddress === tokenMint);
@@ -922,18 +933,10 @@ class MarketRelayServer {
         console.log(`✅ Using pairAddress from token cache: ${lpAddress}`);
       }
 
-      // Determine LP address based on token status
+      // For migrated tokens, migratedTo contains the LP address
       if (tokenData.status === 'migrated' && tokenData.migratedTo) {
-        // For migrated tokens, migratedTo contains the LP address
         lpAddress = tokenData.migratedTo;
-      } else if (tokenData.protocol === 'Pump AMM') {
-        // For Pump AMM tokens, we need to find the LP address
-        // This might be stored in a different field, or we need to fetch it
-        console.log(`🔍 Need to resolve LP address for Pump AMM token: ${tokenMint}`);
-      } else if (tokenData.protocol === 'Pump V1') {
-        // For Pump V1 tokens, use bonding curve address
-        // This might be stored in the token data
-        console.log(`🔍 Need to resolve bonding curve for Pump V1 token: ${tokenMint}`);
+        console.log(`🔄 Using migratedTo: ${lpAddress}`);
       }
 
       if (lpAddress) {
@@ -942,35 +945,40 @@ class MarketRelayServer {
       }
     }
 
-    // Fallback: fetch from pump.fun API
+    // Fallback: fetch from direct pump.fun API (same as frontend)
     try {
-      console.log(`🌐 Fetching LP address from pump.fun API for ${tokenMint}`);
-      const apiUrl = `https://frontend-api-v3.pump.fun/coins/${tokenMint}`;
-      console.log(`🌐 API URL: ${apiUrl}`);
-      const response = await fetch(apiUrl);
+      const url = `https://frontend-api-v3.pump.fun/coins/${tokenMint}`;
+      console.log('🌐 Fetching pair info from pump.fun:', url);
 
-      if (!response.ok) {
-        console.log(`❌ Failed to fetch from pump.fun API: ${response.status}`);
-        return null;
+      const response = await fetch(url);
+      console.log('📡 Pumpfun response status:', response.status);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📦 Pumpfun data:', data);
+
+        // Priority: pump_swap_pool first (migrated tokens), then bonding_curve
+        let pairAddress = null;
+        if (data.pump_swap_pool) {
+          pairAddress = data.pump_swap_pool;
+          console.log('🔄 Using pump_swap_pool (migrated):', pairAddress);
+        } else if (data.bonding_curve) {
+          pairAddress = data.bonding_curve;
+          console.log('📈 Using bonding_curve:', pairAddress);
+        }
+
+        if (pairAddress) {
+          this.registerLpMapping(tokenMint, pairAddress);
+          return pairAddress;
+        }
+      } else {
+        console.warn('❌ Pump.fun API returned status:', response.status);
       }
-
-      const data = await response.json();
-
-      // Determine LP address: pump_swap_pool if exists, otherwise bonding_curve
-      const lpAddress = data.pump_swap_pool || data.bonding_curve;
-
-      if (lpAddress) {
-        this.registerLpMapping(tokenMint, lpAddress);
-        console.log(`✅ Resolved LP address for ${tokenMint}: ${lpAddress} (${data.pump_swap_pool ? 'migrated' : 'bonding curve'})`);
-        return lpAddress;
-      }
-
-      console.log(`❌ No LP address found in pump.fun data for ${tokenMint}`);
-      return null;
     } catch (error) {
-      console.error(`❌ Error fetching LP address for ${tokenMint}:`, error.message);
-      return null;
+      console.warn('Failed to resolve pair address:', error);
     }
+
+    console.log('❌ Could not resolve pair address');
+    return null;
   }
 
   registerLpMapping(tokenMint, lpAddress) {
@@ -983,6 +991,7 @@ class MarketRelayServer {
 
   async fetchInitialMigratedTokens() {
     try {
+      // Refresh/validate tokens before hitting Axiom API
       if (!await this.authManager.ensureValidAuthentication()) {
         console.log('⚠️  Cannot fetch initial tokens - authentication required');
         return false;
@@ -1006,7 +1015,7 @@ class MarketRelayServer {
         'origin': 'https://axiom.trade',
         'pragma': 'no-cache',
         'referer': 'https://axiom.trade/',
-        'x-target-host': 'api6.axiom.trade',
+        'x-target-host': 'api.axiom.trade',
         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
       };
 
@@ -1139,7 +1148,7 @@ class MarketRelayServer {
         const normalized = this.normalizer.normalizeTokenUpdate(parsedToken);
 
         if (normalized && normalized.status === 'migrated') {
-          this.addTokenToCategory(normalized);
+          this.normalizer.tokenRegistry.addOrUpdate(normalized);
           addedCount++;
           const caseType = hasMigratedFromPumpV1 ? 'PRIMARY (migratedFrom)' : (isPumpAmm ? 'SECONDARY (Pump AMM)' : 'TERTIARY (Pump V1 + migratedTo)');
           console.log(`  ✅ Added migrated token: ${normalized.tokenName || normalized.tokenTicker} (MC: $${(normalized.marketCapUSD || 0).toFixed(0)}, Case: ${caseType})`);
@@ -1163,10 +1172,10 @@ class MarketRelayServer {
       this.broadcast({
         type: 'market_data',
         data: {
-          trending: this.marketData.trending.slice(0, 20),
-          finalStretch: this.marketData.finalStretch.slice(0, 20),
-          migrated: this.marketData.migrated.slice(0, 20),
-          newMint: this.marketData.newMint.slice(0, 20),
+          trending: this.marketData.trending.slice(0, 50),
+          finalStretch: this.normalizer.tokenRegistry.getTopCategoryTokens('finalStretch', 50),
+          migrated: this.normalizer.tokenRegistry.getTopCategoryTokens('migrated', 50),
+          newMint: this.normalizer.tokenRegistry.getTopCategoryTokens('newMint', 50),
           solPrice: this.marketData.solPrice,
           lastUpdate: this.marketData.lastUpdate
         }
@@ -1183,6 +1192,12 @@ class MarketRelayServer {
   async initializeAxiomConnection() {
     try {
       console.log('🔌 Initializing Axiom WebSocket connection...');
+
+      // Ensure tokens are fresh before opening WS
+      const authOk = await this.authManager.ensureValidAuthentication();
+      if (!authOk) {
+        throw new Error('Authentication invalid; cannot start Axiom WS');
+      }
 
       // Create WebSocket connector FIRST
       this.wsConnector = new AxiomWebSocketConnector(this.authManager);
@@ -1243,28 +1258,27 @@ class MarketRelayServer {
           this.registerLpMapping(normalized.tokenAddress, normalized.pairAddress);
         }
 
-        // Handle different token statuses
-        if (normalized.status === 'final_stretch' || normalized.status === 'migrated') {
-          // Add to appropriate category (final stretch or migrated)
-          this.addTokenToCategory(normalized);
+        // Add to registry
+        this.normalizer.tokenRegistry.addOrUpdate(normalized);
 
-          // Broadcast new token
-          this.broadcast({
-            type: 'new_token',
-            data: normalized
-          });
-        } else if (normalized.status === 'new' && normalized.protocol === 'Pump V1') {
-          // Handle new mint tokens (Pump V1 only)
-          this.insertTokenSorted(this.marketData.newMint, normalized, 'newMint');
-          this.marketData.lastUpdate = new Date().toISOString();
-          console.log(`✅ Added new mint token: ${normalized.tokenName || normalized.tokenTicker} (${normalized.tokenAddress.slice(0, 8)}...)`);
+        // Broadcast new token
+        this.broadcast({
+          type: 'new_token',
+          data: normalized
+        });
 
-          // Broadcast new mint update
-          this.broadcast({
-            type: 'new_mint_update',
-            data: normalized
-          });
-        }
+        // Broadcast updated lists
+        this.broadcast({
+          type: 'market_data',
+          data: {
+            trending: this.marketData.trending.slice(0, 50),
+            finalStretch: this.normalizer.tokenRegistry.getTopCategoryTokens('finalStretch', 50),
+            migrated: this.normalizer.tokenRegistry.getTopCategoryTokens('migrated', 50),
+            newMint: this.normalizer.tokenRegistry.getTopCategoryTokens('newMint', 50),
+            solPrice: this.marketData.solPrice,
+            lastUpdate: this.marketData.lastUpdate
+          }
+        });
       });
 
       // Subscribe to token updates
@@ -1310,6 +1324,9 @@ class MarketRelayServer {
 
       console.log('✅ Axiom WebSocket connection initialized');
 
+      // Always start Pulse v2 socket (feeds new mint/final stretch/migrated)
+      await this.initializePulseV2Connection();
+
       // Fetch initial tokens after WebSocket is connected
       // Wait a bit for SOL price to be set first
       console.log('⏳ [DEBUG] Scheduling initial data fetch in 2 seconds...');
@@ -1350,97 +1367,215 @@ class MarketRelayServer {
     }
   }
 
-  /**
-   * Insert token into sorted list maintaining sort order
-   * Final Stretch: sorted by bondingCurveProgress DESC (highest first)
-   * Migrated: sorted by marketCapUSD DESC (highest first)
-   * New Mint: sorted by createdAt DESC (newest first)
-   */
-  insertTokenSorted(list, token, category) {
-    // Remove if already exists
-    const existingIndex = list.findIndex(t => t.tokenAddress === token.tokenAddress);
-    if (existingIndex !== -1) {
-      list.splice(existingIndex, 1);
-    }
+  async initializePulseV2Connection() {
+    try {
+      // Ensure tokens are fresh before opening pulse WS
+      const authOk = await this.authManager.ensureValidAuthentication();
+      if (!authOk) {
+        throw new Error('Authentication invalid; cannot start Pulse v2 WS');
+      }
 
-    // Find insertion point based on sort criteria
-    let insertIndex = 0;
-    if (category === 'final_stretch') {
-      // Sort by bondingCurveProgress DESC (highest first)
-      const tokenProgress = token.bondingCurveProgress || 0;
-      insertIndex = list.findIndex(t => {
-        const tProgress = t.bondingCurveProgress || 0;
-        return tokenProgress > tProgress;
-      });
-      if (insertIndex === -1) insertIndex = list.length;
-    } else if (category === 'migrated') {
-      // Sort by marketCapUSD DESC (highest first)
-      const tokenMC = token.marketCapUSD || 0;
-      insertIndex = list.findIndex(t => {
-        const tMC = t.marketCapUSD || 0;
-        return tokenMC > tMC;
-      });
-      if (insertIndex === -1) insertIndex = list.length;
-    } else if (category === 'newMint') {
-      // Sort by createdAt DESC (newest first)
-      const tokenTime = new Date(token.createdAt || 0).getTime();
-      insertIndex = list.findIndex(t => {
-        const tTime = new Date(t.createdAt || 0).getTime();
-        return tokenTime > tTime;
-      });
-      if (insertIndex === -1) insertIndex = list.length;
-    }
+      const PulseWSConnector = require('./pulse-ws-connector');
+      this.pulseConnector = new PulseWSConnector(this.authManager, 'INFO');
 
-    // Insert at correct position
-    list.splice(insertIndex, 0, token);
+       this.pulseConnector.onSnapshot((payload) => {
+         // Pulse connector passes { tokenKey, payload }; unwrap tokenKey which contains the data
+         const snap = payload?.tokenKey || payload;
 
-    // Keep only top 20
-    if (list.length > 20) {
-      list.splice(20);
+         this.pulseData.snapshot = snap;
+         this.logRawSample('pulse_v2_snapshot', { ts: Date.now(), length: Array.isArray(snap?.newPairs) ? snap.newPairs.length : 0 });
+         const npLen = Array.isArray(snap?.newPairs) ? snap.newPairs.length : 0;
+         const fsLen = Array.isArray(snap?.finalStretch) ? snap.finalStretch.length : 0;
+         const migLen = Array.isArray(snap?.migrated) ? snap.migrated.length : 0;
+         console.log(`📦 Pulse snapshot received newPairs=${npLen} finalStretch=${fsLen} migrated=${migLen}`);
+         if (npLen === 0 && fsLen === 0 && migLen === 0) {
+           console.log('⚠️  Pulse snapshot is empty, payload structure:', JSON.stringify(payload).substring(0, 500));
+         }
+         this.processPulseSnapshot(snap);
+       });
+
+       this.pulseConnector.onDelta((delta) => {
+         this.applyPulseDelta(delta);
+       });
+
+      await this.pulseConnector.connect();
+      console.log('✅ Pulse v2 connector initialized (live feed)');
+    } catch (err) {
+      console.error('⚠️ Pulse v2 connector failed to start:', err.message);
     }
   }
 
-  addTokenToCategory(token) {
-    if (token.pairAddress) {
-      this.registerLpMapping(token.tokenAddress, token.pairAddress);
-    } else if (token.migratedTo) {
-      this.registerLpMapping(token.tokenAddress, token.migratedTo);
-    }
+  processPulseSnapshot(snap) {
+    if (!snap || typeof snap !== 'object') return;
+    const { newPairs = [], finalStretch = [], migrated = [] } = snap;
 
-    // Add tokens based on their status
-    // Trending: new tokens gaining popularity
-    // Final Stretch: protocol === 'Pump V1' AND bondingCurveProgress < 100
-    // Migrated: protocol === 'Pump AMM' OR bondingCurveProgress >= 100
-    // New: new Pump V1 tokens
-    switch (token.status) {
-      case 'trending':
-        // For trending tokens, we maintain them via WebSocket updates
-        // Individual trending tokens are managed by the trending subscription
-        break;
-      case 'migrated':
-        this.insertTokenSorted(this.marketData.migrated, token, 'migrated');
-        this.marketData.lastUpdate = new Date().toISOString();
-        console.log(`✅ Added migrated token: ${token.tokenName || token.tokenTicker} (${token.tokenAddress.slice(0, 8)}...) - MC: $${(token.marketCapUSD || 0).toFixed(0)}`);
-        break;
-      case 'final_stretch':
-        this.insertTokenSorted(this.marketData.finalStretch, token, 'final_stretch');
-        this.marketData.lastUpdate = new Date().toISOString();
-        console.log(`✅ Added final stretch token: ${token.tokenName || token.tokenTicker} (${token.tokenAddress.slice(0, 8)}...) - Progress: ${(token.bondingCurveProgress || 0).toFixed(1)}%`);
-        break;
-      case 'new':
-        if (token.protocol === 'Pump V1') {
-          this.insertTokenSorted(this.marketData.newMint, token, 'newMint');
-          this.marketData.lastUpdate = new Date().toISOString();
-          //console.log(`✅ Added new mint token: ${token.tokenName || token.tokenTicker} (${token.tokenAddress.slice(0, 8)}...)`);
-        } else {
-          //console.log(`⚠️  Skipping new token (non Pump V1): ${token.tokenName || token.tokenTicker}, protocol=${token.protocol || 'unknown'}`);
+    this.pulseBaseMap.clear();
+
+    const toNormalized = (entry, status) => {
+      if (!Array.isArray(entry) || entry.length < 12) return null;
+
+      const protocolDetails = entry[8] || null;
+      const base = {
+        pairAddress: entry[0],
+        tokenAddress: entry[1],
+        creator: entry[2],
+        tokenName: entry[3],
+        tokenTicker: entry[4],
+        imageUrl: entry[5],
+        protocol: entry[7],
+        protocolDetails,
+        website: entry[9] || null,
+        twitter: entry[10] || null,
+        telegram: entry[11] || null,
+        status,
+        createdAt: entry[33] || entry[34] || entry[30] || null,
+        migratedFrom: protocolDetails?.migratedFrom || protocolDetails?.migrated_from || null,
+        migratedTo: protocolDetails?.migratedTo || protocolDetails?.migrated_to || null,
+        bondingCurveProgress: entry[26] ?? null,
+        // Initial metrics from snapshot
+        volumeSol: entry[18] ?? 0,
+        marketCapSol: entry[19] ?? 0,
+        totalFeesSol: entry[20] ?? null,
+        txCount: entry[23] ?? null,
+        buyCount: entry[24] ?? null,
+        sellCount: entry[25] ?? null,
+        holders: entry[28] ?? null,
+        numHolders: entry[28] ?? null
+      };
+
+      if (!base.pairAddress) return null;
+
+      this.pulseBaseMap.set(base.pairAddress, base);
+
+      // Check if token already exists in registry
+      const existing = this.normalizer.tokenRegistry.get(base.tokenAddress);
+      if (existing) {
+        // Token exists, don't update metrics from snapshot to preserve delta updates
+        return null;
+      }
+
+      const updates = {}; // Empty for snapshot
+      return this.normalizer.normalizePulseV2Update({ tokenKey: base.pairAddress, updates }, base);
+    };
+
+    const normalizedNew = newPairs.map((e) => toNormalized(e, 'new')).filter(Boolean);
+    const normalizedFs = finalStretch.map((e) => toNormalized(e, 'final_stretch')).filter(Boolean);
+    const normalizedMig = migrated.map((e) => toNormalized(e, 'migrated')).filter(Boolean);
+
+    const createdAtMs = (token) => {
+      const ts = new Date(token.createdAt || 0).getTime();
+      return Number.isFinite(ts) ? ts : 0;
+    };
+
+    // Add to registry (only new tokens, preserve existing metrics)
+    normalizedFs.forEach(token => { if (token) this.normalizer.tokenRegistry.addOrUpdate(token); });
+    normalizedMig.forEach(token => { if (token) this.normalizer.tokenRegistry.addOrUpdate(token); });
+
+    this.marketData.lastUpdate = new Date().toISOString();
+    console.log(`✅ Pulse snapshot applied to registry: newMint=${this.normalizer.tokenRegistry.getCategoryView('newMint').length}, finalStretch=${this.normalizer.tokenRegistry.getCategoryView('finalStretch').length}, migrated=${this.normalizer.tokenRegistry.getCategoryView('migrated').length}`);
+    this.persistPulseSnapshot();
+
+    this.broadcast({
+      type: 'market_data',
+      data: {
+        trending: this.marketData.trending.slice(0, 50),
+        finalStretch: this.normalizer.tokenRegistry.getTopCategoryTokens('finalStretch', 50),
+        migrated: this.normalizer.tokenRegistry.getTopCategoryTokens('migrated', 50),
+        newMint: this.normalizer.tokenRegistry.getTopCategoryTokens('newMint', 50),
+        solPrice: this.marketData.solPrice,
+        lastUpdate: this.marketData.lastUpdate
+      }
+    });
+  }
+
+  persistPulseSnapshot() {
+    try {
+      const snapshot = {
+        ts: new Date().toISOString(),
+        counts: {
+          newMint: this.marketData.newMint.length,
+          finalStretch: this.marketData.finalStretch.length,
+          migrated: this.marketData.migrated.length
+        },
+        data: {
+          newMint: this.marketData.newMint.slice(0, 50),
+          finalStretch: this.marketData.finalStretch.slice(0, 50),
+          migrated: this.marketData.migrated.slice(0, 50)
         }
-        break;
-      default:
-        // Ignore other statuses
-        break;
+      };
+      fs.writeFileSync(this.pulseSnapshotPath, JSON.stringify(snapshot, null, 2));
+      console.log(`📝 Pulse snapshot persisted to ${this.pulseSnapshotPath}`);
+    } catch (err) {
+      console.error('⚠️ Failed to persist pulse snapshot:', err.message);
     }
   }
+
+  applyPulseDelta(delta) {
+    if (!delta || !delta.tokenKey) return;
+
+    // Apply delta to registry
+    let base = this.pulseBaseMap.get(delta.tokenKey);
+    if (!base) {
+      // Try to reconstruct base
+      let tokenMint = null;
+      for (const [mint, lp] of this.lpCache.entries()) {
+        if (lp === delta.tokenKey) {
+          tokenMint = mint;
+          break;
+        }
+      }
+
+      const searchPool = [
+        ...this.normalizer.tokenRegistry.getCategoryView('newMint'),
+        ...this.normalizer.tokenRegistry.getCategoryView('finalStretch'),
+        ...this.normalizer.tokenRegistry.getCategoryView('migrated')
+      ];
+
+      const fallback = tokenMint
+        ? searchPool.find((t) => t.tokenAddress === tokenMint)
+        : searchPool.find((t) => t.pairAddress === delta.tokenKey || t.tokenAddress === delta.tokenKey);
+      if (fallback) {
+        this.pulseBaseMap.set(delta.tokenKey, fallback);
+        base = fallback;
+      }
+    }
+
+    if (!base) {
+      console.log(`⚠️ Pulse delta received without base for ${delta.tokenKey}`);
+      return;
+    }
+
+    const normalized = this.normalizer.normalizePulseV2Update(delta, base);
+    if (!normalized) return;
+
+    this.updateTokenInCategory(normalized);
+  }
+
+  persistPulseSnapshot() {
+    try {
+      const snapshot = {
+        ts: new Date().toISOString(),
+        counts: {
+          newMint: this.normalizer.tokenRegistry.getCategoryView('newMint').length,
+          finalStretch: this.normalizer.tokenRegistry.getCategoryView('finalStretch').length,
+          migrated: this.normalizer.tokenRegistry.getCategoryView('migrated').length
+        },
+        data: {
+          newMint: this.normalizer.tokenRegistry.getTopCategoryTokens('newMint', 50),
+          finalStretch: this.normalizer.tokenRegistry.getTopCategoryTokens('finalStretch', 50),
+          migrated: this.normalizer.tokenRegistry.getTopCategoryTokens('migrated', 50)
+        }
+      };
+      fs.writeFileSync(this.pulseSnapshotPath, JSON.stringify(snapshot, null, 2));
+      console.log(`📝 Pulse snapshot persisted to ${this.pulseSnapshotPath}`);
+    } catch (err) {
+      console.error('⚠️ Failed to persist pulse snapshot:', err.message);
+    }
+  }
+
+
+
+
 
   updateTokenInCategory(token) {
     if (token.pairAddress) {
@@ -1449,83 +1584,9 @@ class MarketRelayServer {
       this.registerLpMapping(token.tokenAddress, token.migratedTo);
     }
 
-    // Check if token is already in any list
-    const migratedIndex = this.marketData.migrated.findIndex(
-      t => t.tokenAddress === token.tokenAddress
-    );
-    const finalStretchIndex = this.marketData.finalStretch.findIndex(
-      t => t.tokenAddress === token.tokenAddress
-    );
-    const newMintIndex = this.marketData.newMint.findIndex(
-      t => t.tokenAddress === token.tokenAddress
-    );
-
-    // If token is in migrated list
-    if (migratedIndex !== -1) {
-      // Update in place and re-sort (market cap may have changed)
-      this.marketData.migrated[migratedIndex] = token;
-      // Re-sort migrated list by market cap
-      this.marketData.migrated.sort((a, b) => {
-        const aMC = a.marketCapUSD || 0;
-        const bMC = b.marketCapUSD || 0;
-        return bMC - aMC; // DESC
-      });
-      this.marketData.migrated = this.marketData.migrated.slice(0, 20);
-      this.marketData.lastUpdate = new Date().toISOString();
-      return;
-    }
-
-    // If token is in final stretch list
-    if (finalStretchIndex !== -1) {
-      const oldStatus = this.marketData.finalStretch[finalStretchIndex].status;
-
-      // Check if status changed to migrated
-      if (oldStatus === 'final_stretch' && token.status === 'migrated') {
-        // Move from final stretch to migrated
-        this.marketData.finalStretch.splice(finalStretchIndex, 1);
-        this.insertTokenSorted(this.marketData.migrated, token, 'migrated');
-        this.marketData.lastUpdate = new Date().toISOString();
-        console.log(`🔄 Token migrated: ${token.tokenName || token.tokenTicker} (${token.tokenAddress.slice(0, 8)}...)`);
-      } else {
-        // Update in place and re-sort (bonding curve progress may have changed)
-        this.marketData.finalStretch[finalStretchIndex] = token;
-        // Re-sort final stretch list by bonding curve progress
-        this.marketData.finalStretch.sort((a, b) => {
-          const aProgress = a.bondingCurveProgress || 0;
-          const bProgress = b.bondingCurveProgress || 0;
-          return bProgress - aProgress; // DESC
-        });
-        this.marketData.finalStretch = this.marketData.finalStretch.slice(0, 20);
-        this.marketData.lastUpdate = new Date().toISOString();
-      }
-      return;
-    }
-
-    // If token is in new mint list
-    if (newMintIndex !== -1) {
-      // Update in place and re-sort (if needed)
-      this.marketData.newMint[newMintIndex] = token;
-      // Re-sort new mint list by createdAt DESC
-      this.marketData.newMint.sort((a, b) => {
-        const aTime = new Date(a.createdAt || 0).getTime();
-        const bTime = new Date(b.createdAt || 0).getTime();
-        return bTime - aTime; // DESC
-      });
-      this.marketData.newMint = this.marketData.newMint.slice(0, 20);
-      this.marketData.lastUpdate = new Date().toISOString();
-      return;
-    }
-
-    // Token not found in any list - add if it matches criteria
-    if (token.status === 'migrated' || token.status === 'final_stretch' || token.status === 'new') {
-      console.log(`➕ Adding new token to ${token.status}: ${token.tokenName || token.tokenTicker} (${token.tokenAddress.slice(0, 8)}...)`);
-      this.addTokenToCategory(token);
-    } else {
-      // Debug: log why token was ignored
-      if (token.protocol === 'Pump AMM') {
-        console.log(`❌ Ignoring Pump AMM token (status: ${token.status}): ${token.tokenName || token.tokenTicker}, migratedFrom: ${token.migratedFrom || 'null'}`);
-      }
-    }
+    // Update in registry - views will be recomputed on demand
+    this.normalizer.tokenRegistry.addOrUpdate(token);
+    this.marketData.lastUpdate = new Date().toISOString();
   }
 
   async handleTradeSubscription(ws, tokenMint) {

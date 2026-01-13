@@ -389,11 +389,11 @@ const formatMarketCap = (value: number | null, solPrice: number | null = null): 
   if (value >= 1000000000) {
     return `$${(value / 1000000000).toFixed(2)}B`;
   } else if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
+    return `$${(value / 1000000).toFixed(2)}M`;
   } else if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
+    return `$${(value / 1000).toFixed(2)}K`;
   } else {
-    return `$${value.toFixed(0)}`;
+    return `$${value.toFixed(2)}`;
   }
 };
 
@@ -696,11 +696,7 @@ const Screener = ({ operator }: ScreenerProps) => {
     });
   };
 
-  const isLoading = connectionState === 'connecting' &&
-    trendingCoins.length === 0 &&
-    finalStretchCoins.length === 0 &&
-    migratedCoins.length === 0 &&
-    newMintCoins.length === 0;
+  const isLoading = connectionState === 'connecting';
 
   const applyFilters = (coins: Coin[], filters: FilterState) => {
     const inRange = (val: number | null | undefined, range: FilterRange) => {

@@ -3,13 +3,153 @@
  * Converts Axiom format to standardized format for frontend consumption
  */
 
-class MarketDataNormalizer {
+class TokenRegistry {
   constructor() {
+    this.tokens = new Map(); // tokenAddress -> tokenData
+    this.categoryViews = new Map(); // category -> { tokens: [], sortKey, sortDir, filters }
     this.solPrice = null;
   }
 
   setSolPrice(price) {
     this.solPrice = price;
+    // Recompute market caps for all tokens
+    for (const [address, token] of this.tokens) {
+      if (token.marketCapSol != null) {
+        token.marketCapUSD = this.solPrice ? token.marketCapSol * this.solPrice : null;
+      }
+      if (token.volumeSol != null) {
+        token.volumeUSD = this.solPrice ? token.volumeSol * this.solPrice : null;
+      }
+    }
+  }
+
+  addOrUpdate(token) {
+    const existing = this.tokens.get(token.tokenAddress);
+    if (existing) {
+      // Merge updates
+      Object.assign(existing, token);
+    } else {
+      this.tokens.set(token.tokenAddress, token);
+    }
+    this.invalidateCategoryViews();
+  }
+
+  get(tokenAddress) {
+    return this.tokens.get(tokenAddress);
+  }
+
+  remove(tokenAddress) {
+    this.tokens.delete(tokenAddress);
+    this.invalidateCategoryViews();
+  }
+
+  getAll() {
+    return Array.from(this.tokens.values());
+  }
+
+  invalidateCategoryViews() {
+    // Mark views as stale - they'll be recomputed on next access
+    for (const view of this.categoryViews.values()) {
+      view.stale = true;
+    }
+  }
+
+  getCategoryView(category, sortKey = 'recent', sortDir = 'desc', filters = {}) {
+    const cacheKey = `${category}-${sortKey}-${sortDir}-${JSON.stringify(filters)}`;
+    let view = this.categoryViews.get(cacheKey);
+
+    if (!view || view.stale) {
+      const tokens = this.getAll().filter(token => this.matchesCategory(token, category));
+      const filtered = this.applyFilters(tokens, filters);
+      const sorted = this.sortTokens(filtered, sortKey, sortDir);
+
+      view = {
+        tokens: sorted,
+        sortKey,
+        sortDir,
+        filters,
+        stale: false
+      };
+      this.categoryViews.set(cacheKey, view);
+    }
+
+    return view.tokens;
+  }
+
+  getTopCategoryTokens(category, limit = 50, sortKey = 'recent', sortDir = 'desc') {
+    return this.getCategoryView(category, sortKey, sortDir).slice(0, limit);
+  }
+
+  matchesCategory(token, category) {
+    switch (category) {
+      case 'finalStretch':
+        return token.status === 'final_stretch';
+      case 'migrated':
+        return token.status === 'migrated';
+      case 'newMint':
+        return token.status === 'new';
+      default:
+        return false;
+    }
+  }
+
+  applyFilters(tokens, filters) {
+    return tokens.filter(token => {
+      if (filters.mc && token.marketCapUSD != null) {
+        if (filters.mc.min != null && token.marketCapUSD < filters.mc.min) return false;
+        if (filters.mc.max != null && token.marketCapUSD > filters.mc.max) return false;
+      }
+      if (filters.volume && token.volumeUSD != null) {
+        if (filters.volume.min != null && token.volumeUSD < filters.volume.min) return false;
+        if (filters.volume.max != null && token.volumeUSD > filters.volume.max) return false;
+      }
+      if (filters.holders && token.numHolders != null) {
+        if (filters.holders.min != null && token.numHolders < filters.holders.min) return false;
+        if (filters.holders.max != null && token.numHolders > filters.holders.max) return false;
+      }
+      return true;
+    });
+  }
+
+  sortTokens(tokens, sortKey, sortDir) {
+    const direction = sortDir === 'asc' ? 1 : -1;
+    return [...tokens].sort((a, b) => {
+      let aVal, bVal;
+      switch (sortKey) {
+        case 'recent':
+          aVal = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          bVal = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          break;
+        case 'mc':
+          aVal = a.marketCapUSD || 0;
+          bVal = b.marketCapUSD || 0;
+          break;
+        case 'volume':
+          aVal = a.volumeUSD || 0;
+          bVal = b.volumeUSD || 0;
+          break;
+        case 'holders':
+          aVal = a.numHolders || 0;
+          bVal = b.numHolders || 0;
+          break;
+        default:
+          return 0;
+      }
+      if (aVal === bVal) return 0;
+      return aVal > bVal ? direction : -direction;
+    });
+  }
+}
+
+class MarketDataNormalizer {
+  constructor() {
+    this.solPrice = null;
+    this.tokenRegistry = new TokenRegistry();
+  }
+
+  setSolPrice(price) {
+    this.solPrice = price;
+    this.tokenRegistry.setSolPrice(price);
   }
 
   /**
@@ -256,6 +396,65 @@ class MarketDataNormalizer {
         }
         return status;
       })()
+    };
+  }
+
+  /**
+   * Normalize Pulse v2 delta updates using base snapshot metadata.
+   */
+  normalizePulseV2Update(delta, base) {
+    if (!delta || typeof delta !== 'object') return null;
+    const { tokenKey, updates } = delta;
+    if (!tokenKey || !updates) return null;
+
+    const pairAddress = base?.pairAddress || tokenKey;
+    const tokenAddress = base?.tokenAddress || pairAddress;
+    const tokenName = base?.tokenName || '';
+    const tokenTicker = base?.tokenTicker || '';
+
+    const marketCapSol = updates[19] ?? base?.marketCapSol ?? 0;
+    const marketCapUSD = this.solPrice ? marketCapSol * this.solPrice : null;
+    const volumeSol = updates[18] ?? base?.volumeSol ?? 0;
+    const volumeUSD = this.solPrice ? volumeSol * this.solPrice : null;
+    const bondingCurveProgress = updates[26] ?? base?.bondingCurveProgress ?? null;
+    const createdAt = base?.createdAt || null;
+    const migratedFrom = base?.migratedFrom || base?.protocolDetails?.migratedFrom || base?.protocolDetails?.migrated_from || null;
+    const migratedTo = base?.migratedTo || base?.protocolDetails?.migratedTo || base?.protocolDetails?.migrated_to || null;
+    const ageMinutes = createdAt ? (Date.now() - new Date(createdAt).getTime()) / (1000 * 60) : null;
+
+    return {
+      tokenAddress,
+      tokenName,
+      tokenTicker,
+      symbol: tokenTicker,
+      name: tokenName,
+      imageUrl: base?.imageUrl || null,
+      protocol: base?.protocol || null,
+      pairAddress,
+
+      marketCapSol,
+      marketCapUSD,
+      volumeSol,
+      volumeUSD,
+
+      totalFeesSol: updates[20] ?? base?.totalFeesSol ?? null,
+      txCount: updates[23] ?? base?.txCount ?? null,
+      buyCount: updates[24] ?? base?.buyCount ?? null,
+      sellCount: updates[25] ?? base?.sellCount ?? null,
+      holders: updates[28] ?? base?.holders ?? null,
+      numHolders: updates[28] ?? base?.numHolders ?? null,
+      bondingCurveProgress,
+      migratedFrom,
+      migratedTo,
+      protocolDetails: base?.protocolDetails || null,
+      website: base?.website || null,
+      twitter: base?.twitter || null,
+      telegram: base?.telegram || null,
+      age: ageMinutes,
+      ageFormatted: this.formatAge(ageMinutes),
+      createdAt,
+      updatedAt: new Date().toISOString(),
+      status: base?.status || 'new'
     };
   }
 
