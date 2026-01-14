@@ -839,7 +839,7 @@ class MarketRelayServer {
       supply: data.total_supply/1000000 || 0,
       dexPaid: data.dex_paid || false,
       feeVolumeSol: data.fee_volume || 0,
-      pairAddress: data.bonding_curve || data.pump_swap_pool || tokenAddress
+      pairAddress: data.pump_swap_pool || data.bonding_curve || tokenAddress
     };
   }
 
