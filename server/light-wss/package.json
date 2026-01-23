@@ -8,11 +8,15 @@
     "dev": "node wallet-wss-server.js"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@pump-fun/pump-swap-sdk": "^1.7.9",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "dotenv": "^16.4.7",
     "pg": "^8.16.3",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "bn.js": "^5.2.2",
+    "undici-types": "^6.20.0"
   },
   "keywords": [
     "websocket",

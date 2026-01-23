@@ -180,11 +180,36 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const [walletConnectionStatus, setWalletConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [selectedWallets, setSelectedWallets] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isTrading, setIsTrading] = useState(false);
+  const [tradeStatus, setTradeStatus] = useState<string | null>(null);
+  const [multiWalletProcessing, setMultiWalletProcessing] = useState<{
+    active: boolean;
+    currentWallet: string | null;
+    remainingWallets: string[];
+    completedWallets: string[];
+    failedWallets: string[];
+  }>({
+    active: false,
+    currentWallet: null,
+    remainingWallets: [],
+    completedWallets: [],
+    failedWallets: []
+  });
+  const [finalStats, setFinalStats] = useState<{
+    completed: number;
+    failed: number;
+    total: number;
+  } | null>(null);
+
+  // Solscan URL generator
+  const getSolscanUrl = (txSignature: string) => {
+    return `https://solscan.io/tx/${txSignature}`;
+  };
 
   // Toast notification function
   const showToast = (message: string) => {
     setToastMessage(message);
-    setTimeout(() => setToastMessage(null), 2000); // Hide after 2 seconds
+    setTimeout(() => setToastMessage(null), 3000); // Extended to 3 seconds for links
   };
   const [wssConnection, setWssConnection] = useState<WebSocket | null>(null);
    const searchParams = useSearchParams();
@@ -374,6 +399,54 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                 console.log('🔄 Updated wallets state:', updated.map(w => ({ name: w.name, sol: w.solBalance, spl: w.splBalance })));
                 return updated;
               });
+            } else if (data.type === 'transaction_sent') {
+              console.log('✅ Transaction sent to Solana:', data.txSignature);
+
+              // Check if this is part of multi-wallet processing
+              if (multiWalletProcessing.active && data.walletId === multiWalletProcessing.currentWallet) {
+                // Move to next wallet in multi-wallet processing
+                setMultiWalletProcessing(prev => {
+                  const updated = {
+                    ...prev,
+                    completedWallets: [...prev.completedWallets, data.walletId],
+                    currentWallet: prev.remainingWallets[0] || null,
+                    remainingWallets: prev.remainingWallets.slice(1)
+                  };
+
+                  // If no more wallets, complete the process
+                  if (!updated.currentWallet) {
+                    setTimeout(() => {
+                      setFinalStats({
+                        completed: updated.completedWallets.length,
+                        failed: updated.failedWallets.length,
+                        total: selectedWallets.length
+                      });
+                      setMultiWalletProcessing({ ...updated, active: false });
+                      setTimeout(() => setFinalStats(null), 4000);
+                    }, 500);
+                  }
+
+                  return updated;
+                });
+              } else {
+                // Single wallet transaction
+                const solscanLink = `<a href="${getSolscanUrl(data.txSignature)}" target="_blank" class="underline hover:text-green-300">[TX]</a>`;
+                showToast(`Transaction confirmed ${solscanLink}`);
+              }
+            } else if (data.type === 'transaction_failed') {
+              console.log('❌ Transaction failed:', data.error);
+
+              // Handle multi-wallet failure
+              if (multiWalletProcessing.active && data.walletId === multiWalletProcessing.currentWallet) {
+                setMultiWalletProcessing(prev => ({
+                  ...prev,
+                  failedWallets: [...prev.failedWallets, data.walletId],
+                  currentWallet: prev.remainingWallets[0] || null,
+                  remainingWallets: prev.remainingWallets.slice(1)
+                }));
+              } else {
+                showToast(`❌ Transaction failed: ${data.error}`);
+              }
             }
           } catch (error) {
             console.error('Failed to parse WSS message:', error);
@@ -988,6 +1061,34 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     }
   }, [tradeMode, tradeSolAmount, tradePercentage, latestTradePrice, connectedWallets, selectedWallets]);
 
+  // Calculate estimated SOL receive for sell mode
+  const calculateEstimatedSolReceive = React.useMemo(() => {
+    if (tradeMode !== 'sell' || !latestTradePrice || !calculateEstimatedTokens) return null;
+
+    // Use current slippage setting
+    const slippagePercent = parseFloat(slippage) || 5;
+    const slippageMultiplier = (100 - slippagePercent) / 100;
+
+    // Estimated SOL = tokens to sell * price per token * slippage adjustment
+    const estimatedSol = calculateEstimatedTokens * latestTradePrice * slippageMultiplier;
+    return estimatedSol;
+  }, [tradeMode, latestTradePrice, calculateEstimatedTokens, slippage]);
+
+  // Handle quick button clicks for percentage-based inputs
+  const handleQuickButton = (percentage: number) => {
+    if (tradeMode === 'buy') {
+      // Calculate SOL amount from percentage of wallet balance
+      const selectedWallet = connectedWallets.find(w => w.id === selectedWallets[0]);
+      if (selectedWallet?.solBalance) {
+        const amount = (selectedWallet.solBalance * percentage / 100).toFixed(4);
+        setTradeSolAmount(amount);
+      }
+    } else {
+      // Set percentage for token selling
+      setTradePercentage(percentage.toString());
+    }
+  };
+
   const validateTradeInputs = () => {
     // Check if we have price data
     if (!latestTradePrice) {
@@ -1016,6 +1117,335 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     }
 
     return { valid: true, error: null };
+  };
+
+  // Build Pump V1 buy instructions via WSS server
+  const buildPumpBuyInstructions = async (params: {
+    mintAddress: string;
+    buyAmount: string; // SOL amount as string
+    walletPublicKey: string;
+    walletId: string; // Wallet ID for signing
+    slippage?: number;
+    protocol?: 'v1' | 'amm'; // Default to v1
+    pairAddress?: string; // For AMM tokens
+  }): Promise<{
+    success: boolean;
+    instructions?: any[];
+    tokenAmount?: string;
+    solAmount?: string;
+    error?: string;
+  }> => {
+    return new Promise((resolve, reject) => {
+      if (!wssConnection || wssConnection.readyState !== WebSocket.OPEN) {
+        reject(new Error('WSS connection not available'));
+        return;
+      }
+
+      const requestId = `pump_buy_${Date.now()}`;
+      const request = {
+        type: 'build_pump_buy',
+        requestId,
+        userId: operator?.userId?.toString() || 'unknown',
+        mintAddress: params.mintAddress,
+        buyAmount: params.buyAmount,
+        walletPublicKey: params.walletPublicKey,
+        walletId: params.walletId, // Wallet ID for signing
+        slippage: params.slippage || 1,
+        protocol: params.protocol || 'v1', // Use detected protocol
+        pairAddress: params.pairAddress // For AMM tokens
+      };
+
+      console.log('📤 Building Pump buy instructions:', request);
+
+      // Set up one-time response handler
+      const handleResponse = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'build_pump_buy_response' && data.requestId === requestId) {
+            // Remove this handler after receiving response
+            wssConnection.removeEventListener('message', handleResponse);
+
+            if (data.success) {
+              console.log('✅ Pump buy instructions built successfully');
+              resolve({
+                success: true,
+                instructions: data.data.instructions,
+                tokenAmount: data.data.tokenAmount,
+                solAmount: data.data.solAmount
+              });
+            } else {
+              console.error('❌ Failed to build Pump buy instructions:', data.error);
+              resolve({
+                success: false,
+                error: data.error || 'Unknown error'
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing WSS response:', error);
+          wssConnection.removeEventListener('message', handleResponse);
+          reject(error);
+        }
+      };
+
+      // Add response handler
+      wssConnection.addEventListener('message', handleResponse);
+
+      // Send the request
+      wssConnection.send(JSON.stringify(request));
+
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        wssConnection.removeEventListener('message', handleResponse);
+        reject(new Error('Timeout waiting for Pump buy instruction response'));
+      }, 30000);
+    });
+  };
+
+  // Build Pump V1 sell instructions via WSS server
+  const buildPumpSellInstructions = async (params: {
+    mintAddress: string;
+    tokenAmount: string; // Token amount to sell as string (in human readable form)
+    walletPublicKey: string;
+    walletId: string; // Wallet ID for signing
+    slippage?: number;
+    protocol?: 'v1' | 'amm'; // Default to v1
+    pairAddress?: string; // For AMM tokens
+  }): Promise<{
+    success: boolean;
+    instructions?: any[];
+    tokenAmount?: string;
+    solAmount?: string;
+    error?: string;
+  }> => {
+    return new Promise((resolve, reject) => {
+      if (!wssConnection || wssConnection.readyState !== WebSocket.OPEN) {
+        reject(new Error('WSS connection not available'));
+        return;
+      }
+
+      const requestId = `pump_sell_${Date.now()}`;
+      const request = {
+        type: 'build_pump_sell',
+        requestId,
+        userId: operator?.userId?.toString() || 'unknown',
+        mintAddress: params.mintAddress,
+        tokenAmount: params.tokenAmount,
+        walletPublicKey: params.walletPublicKey,
+        walletId: params.walletId, // Wallet ID for signing
+        slippage: params.slippage || 1,
+        protocol: params.protocol || 'v1', // Use detected protocol
+        pairAddress: params.pairAddress // For AMM tokens
+      };
+
+      console.log('📤 Building Pump sell instructions:', request);
+
+      // Set up one-time response handler
+      const handleResponse = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'build_pump_sell_response' && data.requestId === requestId) {
+            // Remove this handler after receiving response
+            wssConnection.removeEventListener('message', handleResponse);
+
+            if (data.success) {
+              console.log('✅ Pump sell instructions built successfully');
+              resolve({
+                success: true,
+                instructions: data.data.instructions,
+                tokenAmount: data.data.tokenAmount,
+                solAmount: data.data.solAmount
+              });
+            } else {
+              console.error('❌ Failed to build Pump sell instructions:', data.error);
+              resolve({
+                success: false,
+                error: data.error || 'Unknown error'
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing WSS response:', error);
+          wssConnection.removeEventListener('message', handleResponse);
+          reject(error);
+        }
+      };
+
+      // Add response handler
+      wssConnection.addEventListener('message', handleResponse);
+
+      // Send the request
+      wssConnection.send(JSON.stringify(request));
+
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        wssConnection.removeEventListener('message', handleResponse);
+        reject(new Error('Timeout waiting for Pump sell instruction response'));
+      }, 30000);
+    });
+  };
+
+  // Balance validation for multi-wallet processing
+  const validateWalletBalance = (walletId: string, requiredAmount: number): boolean => {
+    const wallet = connectedWallets.find(w => w.id === walletId);
+    if (!wallet) return false;
+
+    // Check if wallet has enough SOL for transaction + fees
+    const buffer = 0.001; // 0.001 SOL buffer for fees
+    return (wallet.solBalance || 0) >= (requiredAmount + buffer);
+  };
+
+  // Multi-wallet sequential selling
+  const processMultiWalletSell = async (walletIds: string[], percentage: number) => {
+    setMultiWalletProcessing({
+      active: true,
+      currentWallet: walletIds[0],
+      remainingWallets: walletIds.slice(1),
+      completedWallets: [],
+      failedWallets: []
+    });
+
+    for (const walletId of walletIds) {
+      const wallet = connectedWallets.find(w => w.id === walletId);
+      if (!wallet) continue;
+
+      // Calculate token amount (percentage of this wallet's token balance)
+      const tokenAmount = (wallet.splBalance * percentage) / 100;
+
+      // Skip wallets with zero/insufficient tokens
+      if (tokenAmount <= 0) {
+        setMultiWalletProcessing(prev => ({
+          ...prev,
+          failedWallets: [...prev.failedWallets, walletId],
+          currentWallet: prev.remainingWallets[0] || null,
+          remainingWallets: prev.remainingWallets.slice(1)
+        }));
+        continue;
+      }
+
+      try {
+        setMultiWalletProcessing(prev => ({
+          ...prev,
+          currentWallet: walletId
+        }));
+
+        showToast(`💥 Selling ${percentage}% (${formatCompact(tokenAmount, 1)} tokens) from wallet ${walletId}...`);
+
+      const result = await buildPumpSellInstructions({
+        mintAddress: currentCoin,
+        tokenAmount: tokenAmount.toString(),
+        walletPublicKey: wallet.publicKey,
+        walletId: walletId,
+        slippage: parseFloat(slippage) || 5,
+        protocol: protocolType || 'v1',
+        pairAddress: pairInfo?.pairAddress
+      });
+
+        if (!result.success) {
+          throw new Error(result.error);
+        }
+
+        // Wait for transaction confirmation (handled by WebSocket)
+
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        setMultiWalletProcessing(prev => ({
+          ...prev,
+          failedWallets: [...prev.failedWallets, walletId]
+        }));
+      }
+    }
+
+    // Processing complete - show final stats
+    setTimeout(() => {
+      setFinalStats({
+        completed: multiWalletProcessing.completedWallets.length,
+        failed: multiWalletProcessing.failedWallets.length,
+        total: walletIds.length
+      });
+
+      setMultiWalletProcessing(prev => ({ ...prev, active: false, currentWallet: null }));
+
+      setTimeout(() => {
+        setFinalStats(null);
+      }, 4000);
+    }, 1000);
+  };
+
+  // Multi-wallet sequential buying
+  const processMultiWalletBuy = async (walletIds: string[], amount: number) => {
+    setMultiWalletProcessing({
+      active: true,
+      currentWallet: walletIds[0],
+      remainingWallets: walletIds.slice(1),
+      completedWallets: [],
+      failedWallets: []
+    });
+
+    for (const walletId of walletIds) {
+      // Balance validation
+      if (!validateWalletBalance(walletId, amount)) {
+        showToast(`❌ Wallet ${walletId} insufficient balance - skipping`);
+        setMultiWalletProcessing(prev => ({
+          ...prev,
+          failedWallets: [...prev.failedWallets, walletId],
+          currentWallet: prev.remainingWallets[0] || null,
+          remainingWallets: prev.remainingWallets.slice(1)
+        }));
+        continue;
+      }
+
+      const wallet = connectedWallets.find(w => w.id === walletId);
+      if (!wallet) continue;
+
+      try {
+        setMultiWalletProcessing(prev => ({
+          ...prev,
+          currentWallet: walletId
+        }));
+
+        showToast(`🪙 Processing wallet ${walletId}: Buying ${amount.toFixed(4)} SOL...`);
+
+        const result = await buildPumpBuyInstructions({
+          mintAddress: currentCoin,
+          buyAmount: amount.toString(),
+          walletPublicKey: wallet.publicKey,
+          walletId: walletId,
+          slippage: parseFloat(slippage) || 5,
+          protocol: protocolType || 'v1',
+          pairAddress: pairInfo?.pairAddress
+        });
+
+        if (!result.success) {
+          throw new Error(result.error);
+        }
+
+        // Wait for transaction confirmation (handled by WebSocket)
+
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        showToast(`❌ Wallet ${walletId} failed: ${errorMsg}`);
+        setMultiWalletProcessing(prev => ({
+          ...prev,
+          failedWallets: [...prev.failedWallets, walletId]
+        }));
+      }
+    }
+
+    // Processing complete - show final stats
+    setTimeout(() => {
+      setFinalStats({
+        completed: multiWalletProcessing.completedWallets.length,
+        failed: multiWalletProcessing.failedWallets.length,
+        total: walletIds.length
+      });
+
+      setMultiWalletProcessing(prev => ({ ...prev, active: false, currentWallet: null }));
+
+      setTimeout(() => {
+        setFinalStats(null);
+      }, 4000);
+    }, 1000);
   };
 
   React.useEffect(() => {
@@ -1662,15 +2092,39 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                           </button>
                                           <button
                                             className="px-2 py-1 text-xs font-mono bg-red-500/30 text-red-100 border border-red-500/50 rounded hover:bg-red-500/40 transition-colors"
-                                            onClick={(e) => {
+                                            onClick={async (e) => {
                                               e.stopPropagation();
-                                              setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
-                                              setTradeMode('sell');
-                                              setTradeTokenAmount(wallet.splBalance?.toString() || '0');
-                                              // Scroll to trading controls
-                                              document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
+
+                                              // Check if wallet has tokens
+                                              if (!wallet.splBalance || wallet.splBalance <= 0) {
+                                                showToast('❌ No tokens to sell in this wallet');
+                                                return;
+                                              }
+
+                                              try {
+                                                showToast(`💥 Quick selling ${formatCompact(wallet.splBalance, 1)} tokens...`);
+
+                                                 const result = await buildPumpSellInstructions({
+                                                   mintAddress: currentCoin,
+                                                   tokenAmount: wallet.splBalance.toString(),
+                                                   walletPublicKey: wallet.publicKey,
+                                                   walletId: wallet.id,
+                                                   slippage: parseFloat(slippage) || 5,
+                                                   protocol: protocolType || 'v1',
+                                                   pairAddress: pairInfo?.pairAddress
+                                                 });
+
+                                                if (!result.success) {
+                                                  showToast(`❌ Quick sell failed: ${result.error}`);
+                                                }
+                                                // Transaction sent to WSS, response handled by WebSocket listener
+
+                                              } catch (error) {
+                                                showToast(`❌ Quick sell failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                                              }
                                             }}
-                                            title="Sell ALL tokens (Nuke)"
+                                            disabled={!wallet.splBalance || wallet.splBalance <= 0}
+                                            title="Quick sell 100% - INSTANT"
                                           >
                                             ☢︎
                                           </button>
@@ -1759,22 +2213,78 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   {tradeMode === 'buy' ? (
                     <div className="flex flex-col gap-2">
                       <label className="text-green-300/80">Amount (SOL)</label>
-                      <input
-                        value={tradeSolAmount}
-                        onChange={(e) => setTradeSolAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          value={tradeSolAmount}
+                          onChange={(e) => setTradeSolAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="w-24 rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
+                        />
+                        <div className="flex gap-1">
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(25)}
+                          >
+                            25%
+                          </button>
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(50)}
+                          >
+                            50%
+                          </button>
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(75)}
+                          >
+                            75%
+                          </button>
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(95)}
+                          >
+                            95%
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
                       <label className="text-green-300/80">Percentage (%)</label>
-                      <input
-                        value={tradePercentage}
-                        onChange={(e) => setTradePercentage(e.target.value)}
-                        placeholder="100"
-                        className="w-full rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          value={tradePercentage}
+                          onChange={(e) => setTradePercentage(e.target.value)}
+                          placeholder="100"
+                          className="w-24 rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
+                        />
+                        <div className="flex gap-1">
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(25)}
+                          >
+                            25%
+                          </button>
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(50)}
+                          >
+                            50%
+                          </button>
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(75)}
+                          >
+                            75%
+                          </button>
+                          <button
+                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                            onClick={() => handleQuickButton(100)}
+                          >
+                            100%
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1823,16 +2333,27 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                     </div>
                   </div>
 
-                 {/* Trade Summary */}
-                 {(tradeMode === 'buy' && tradeSolAmount) || (tradeMode === 'sell' && tradePercentage) ? (
-                   <div className="text-xs text-green-300/70">
-                     <div className="flex items-center gap-1">
-                       <span>Tokens:</span>
-                       <span>~{formatCompact(calculateEstimatedTokens || 0, 2)} {pairInfo?.tokenTicker || 'tokens'}</span>
-                       {recentTrades.length > 0 && (
-                         <span className="text-green-400/60 text-[10px]">● LIVE</span>
-                       )}
-                     </div>
+                  {/* Trade Summary */}
+                  {(tradeMode === 'buy' && tradeSolAmount) || (tradeMode === 'sell' && tradePercentage) ? (
+                    <div className="text-xs text-green-300/70">
+                      {tradeMode === 'buy' ? (
+                        <div className="flex items-center gap-1">
+                          <span>Tokens:</span>
+                          <span>~{formatCompact(calculateEstimatedTokens || 0, 2)} {pairInfo?.tokenTicker || 'tokens'}</span>
+                          {recentTrades.length > 0 && (
+                            <span className="text-green-400/60 text-[10px]">● LIVE</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span>Receive:</span>
+                          <span>~{calculateEstimatedSolReceive ? calculateEstimatedSolReceive.toFixed(4) : '—'} SOL</span>
+                          <span className="text-green-400/60 text-[10px]">(est. {slippage}% slippage)</span>
+                          {recentTrades.length > 0 && (
+                            <span className="text-green-400/60 text-[10px]">● LIVE</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : null}
 
@@ -1855,7 +2376,110 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                        ? 'bg-green-500/20 border-green-400 text-green-100 hover:bg-green-500/30'
                        : 'bg-red-500/20 border-red-400 text-red-100 hover:bg-red-500/30'
                    }`}
-                   onClick={() => {/* hook up actual trade action later */}}
+                    onClick={async () => {
+                       if (tradeMode === 'buy') {
+                         if (selectedWallets.length === 0) {
+                           showToast('Please select a wallet to trade with.');
+                           return;
+                         }
+
+                         const buyAmount = parseFloat(tradeSolAmount);
+                         if (isNaN(buyAmount) || buyAmount <= 0) {
+                           showToast('Please enter a valid SOL amount.');
+                           return;
+                         }
+
+                         if (selectedWallets.length === 1) {
+                           // Single wallet buying
+                           const selectedWallet = connectedWallets.find(w => w.id === selectedWallets[0]);
+                           if (!selectedWallet) {
+                             showToast('Selected wallet not found.');
+                             return;
+                           }
+
+                           try {
+                             showToast(`Buying ${formatCompact(calculateEstimatedTokens || 0, 2)} tokens`);
+
+                             const result = await buildPumpBuyInstructions({
+                               mintAddress: currentCoin,
+                               buyAmount: tradeSolAmount,
+                               walletPublicKey: selectedWallet.publicKey,
+                               walletId: selectedWallet.id,
+                               slippage: parseFloat(slippage) || 5,
+                               protocol: protocolType || 'v1',
+                               pairAddress: pairInfo?.pairAddress
+                             });
+
+                             if (!result.success) {
+                               showToast(`❌ ${result.error}`);
+                             }
+
+                           } catch (error) {
+                             console.error('❌ Error building Pump V1 buy instructions:', error);
+                             showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                           }
+                         } else {
+                           // Multi-wallet sequential buying
+                           await processMultiWalletBuy(selectedWallets, buyAmount);
+                         }
+                       } else {
+                         // SELL MODE
+                         if (selectedWallets.length === 0) {
+                           showToast('Please select a wallet to trade with.');
+                           return;
+                         }
+
+                         const percentage = parseFloat(tradePercentage);
+                         if (isNaN(percentage) || percentage <= 0 || percentage > 100) {
+                           showToast('Please enter a valid percentage (1-100).');
+                           return;
+                         }
+
+                         if (selectedWallets.length === 1) {
+                           // Single wallet selling
+                           const selectedWallet = connectedWallets.find(w => w.id === selectedWallets[0]);
+                           if (!selectedWallet) {
+                             showToast('Selected wallet not found.');
+                             return;
+                           }
+
+                           try {
+                             // Calculate token amount to sell based on percentage and wallet balance
+                             const tokenBalance = selectedWallet.splBalance || 0;
+                             const tokenAmountToSell = (tokenBalance * percentage) / 100;
+
+                             if (tokenAmountToSell <= 0) {
+                               showToast('No tokens to sell in selected wallet.');
+                               return;
+                             }
+
+                             // Show selling notification
+                             showToast(`Selling ${formatCompact(tokenAmountToSell, 2)} tokens`);
+
+                             const result = await buildPumpSellInstructions({
+                               mintAddress: currentCoin,
+                               tokenAmount: tokenAmountToSell.toString(),
+                               walletPublicKey: selectedWallet.publicKey,
+                               walletId: selectedWallet.id,
+                               slippage: parseFloat(slippage) || 5,
+                               protocol: protocolType || 'v1',
+                               pairAddress: pairInfo?.pairAddress
+                             });
+
+                             if (!result.success) {
+                               showToast(`❌ ${result.error}`);
+                             }
+
+                           } catch (error) {
+                             console.error('❌ Error building Pump V1 sell instructions:', error);
+                             showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                           }
+                         } else {
+                           // Multi-wallet sequential selling
+                           await processMultiWalletSell(selectedWallets, percentage);
+                         }
+                      }
+                    }}
                    disabled={selectedWallets.length === 0 || !validateTradeInputs().valid}
                  >
                    {selectedWallets.length === 0
@@ -1864,13 +2488,58 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                        ? `Buy ${tradeSolAmount || '0'} SOL`
                        : `Sell ${tradePercentage || '0'}%`
                    }
-                 </button>
-                 <div className="text-[11px] text-green-500/60">
-                   Preview. Wire up execution flow to light wss when ready.
-                 </div>
-                </div>
+                  </button>
 
-             {/* Advanced & Extra Section - Separate Container */}
+                  {/* Multi-Wallet Progress Widget */}
+                  {multiWalletProcessing.active && (
+                    <div className="mt-3 p-3 bg-black/40 border border-green-500/30 rounded-lg">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-green-100 font-mono text-sm">
+                          Multi-Wallet {tradeMode === 'buy' ? 'Buying' : 'Selling'}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setMultiWalletProcessing(prev => ({ ...prev, active: false }));
+                            showToast(`❌ Multi-wallet ${tradeMode === 'buy' ? 'buying' : 'selling'} cancelled`);
+                          }}
+                          className="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded border border-red-500/30 hover:border-red-500/50"
+                        >
+                          ✕ Cancel
+                        </button>
+                      </div>
+
+                      <div className="space-y-1 text-xs font-mono">
+                        <div>Current: {multiWalletProcessing.currentWallet || '—'}</div>
+                        <div>Remaining: {multiWalletProcessing.remainingWallets.length}</div>
+                        <div className="text-green-400">Completed: {multiWalletProcessing.completedWallets.length}</div>
+                        {multiWalletProcessing.failedWallets.length > 0 && (
+                          <div className="text-red-400">Failed: {multiWalletProcessing.failedWallets.length}</div>
+                        )}
+                      </div>
+
+                      <div className="mt-2 h-2 bg-green-500/20 rounded">
+                        <div
+                          className="h-full bg-green-500 rounded transition-all duration-300"
+                          style={{
+                            width: `${multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length > 0 ?
+                              ((multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length) /
+                               (multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length +
+                                multiWalletProcessing.remainingWallets.length + (multiWalletProcessing.currentWallet ? 1 : 0))) * 100 : 0}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Final Stats */}
+                  {finalStats && (
+                    <div className="mt-2 p-2 bg-green-500/10 border border-green-500/30 rounded text-xs font-mono text-center">
+                      ✅ Multi-wallet completed successful!
+                    </div>
+                  )}
+                 </div>
+
+              {/* Advanced & Extra Section - Separate Container */}
              <div className="border border-green-500/20 rounded-lg bg-black/40 p-4 space-y-4 mt-4">
                <div className="flex justify-center mb-2">
                  <button className="w-full py-1.5 rounded border-2 border-red-500/50 bg-red-500/10 hover:bg-red-500/20 hover:border-red-400 text-red-300 font-mono font-bold text-sm transition-all duration-200 hover:shadow-lg hover:shadow-red-500/20">
@@ -2067,12 +2736,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
          <div className={`fixed bottom-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-500 ease-out ${
            showLadderBuyModal || showLadderSellModal ? 'left-4' : 'right-4'
          }`}>
-          <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
-            <div className="flex items-center gap-2">
-              <span className="text-green-200/80">✓</span>
-              <span>{toastMessage}</span>
-            </div>
-          </div>
+           <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
+             <div className="flex items-center gap-2">
+               <span className="text-green-200/80">✓</span>
+               <span dangerouslySetInnerHTML={{ __html: toastMessage }} />
+             </div>
+           </div>
         </div>
       )}
     </div>
