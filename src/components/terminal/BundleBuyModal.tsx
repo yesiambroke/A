@@ -11,6 +11,9 @@ interface Wallet {
   lastUpdated?: number;
 }
 
+// ... imports
+// Assuming existing imports are fine for now
+
 interface BundleBuyModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -22,6 +25,12 @@ interface BundleBuyModalProps {
   positionIndex?: number;
   onMinimize?: () => void;
   onRestore?: () => void;
+  mintAddress: string;
+  wssConnection: WebSocket | null;
+  operator: any;
+  slippage: string;
+  protocolType: 'v1' | 'amm' | null;
+  pairAddress?: string;
 }
 
 const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
@@ -34,7 +43,13 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   setUseJito,
   positionIndex = 2,
   onMinimize,
-  onRestore
+  onRestore,
+  mintAddress,
+  wssConnection,
+  operator,
+  slippage,
+  protocolType,
+  pairAddress
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -84,8 +99,8 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
       setBundleBuyAbortController(null);
       setBundleBuyBatches([]);
       setProcessedBatches([]);
-       setIsMinimized(false);
-       onRestore?.();
+      setIsMinimized(false);
+      onRestore?.();
     }
   }, [isOpen]);
 
@@ -165,6 +180,16 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   const startBundleBuy = async () => {
     if (isBundleBuyRunning) return;
 
+    if (!wssConnection || wssConnection.readyState !== WebSocket.OPEN) {
+      onToast('❌ Not connected to server');
+      return;
+    }
+
+    if (!mintAddress || mintAddress === 'So11111111111111111111111111111112') {
+      onToast('❌ Invalid token selected');
+      return;
+    }
+
     // Determine batch size
     const currentBatchSize = useRandomBatchSize
       ? Math.floor(Math.random() * 4) + 2 // Random 2-5
@@ -208,37 +233,36 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
           continue;
         }
 
-        // Get wallet names for display
-        const walletNames = batch.map(walletId => {
-          const wallet = connectedWallets.find(w => w.id === walletId);
-          return wallet?.name || `Wallet ${walletId.slice(-4)}`;
-        }).join(', ');
-
-        // Simulate batch buy execution
         onToast(`Executing batch ${batchIndex + 1}/${batches.length}: ${validBatch.length} wallets`);
 
-        // TODO: Send actual batch trade request via WSS
-        // const batchRequest = {
-        //   type: 'batch_buy_request',
-        //   userId: operator?.userId?.toString() || 'unknown',
-        //   requestId: `batch_buy_${Date.now()}`,
-        //   wallets: validBatch.map(walletId => ({
-        //     walletId,
-        //     amount: parseFloat(bundleBuyAmounts[walletId])
-        //   })),
-        //   slippage: parseFloat(slippage),
-        //   useJito
-        // };
-        // wssConnection.send(JSON.stringify(batchRequest));
+        // Send actual batch trade request via WSS
+        const batchRequest = {
+          type: 'bundle_buy_request',
+          userId: operator?.userId?.toString() || 'unknown',
+          requestId: `bundle_buy_${Date.now()}_${batchIndex}`,
+          mintAddress: mintAddress,
+          wallets: validBatch.map(walletId => ({
+            walletId,
+            amount: parseFloat(bundleBuyAmounts[walletId] || '0').toFixed(6)
+          })),
+          slippage: parseFloat(slippage) || 5,
+          protocol: protocolType || 'v1',
+          pairAddress,
+          useJito
+        };
 
-        // Simulate processing delay
+        console.log('📤 Sending Bundle Buy Request:', batchRequest);
+        wssConnection.send(JSON.stringify(batchRequest));
+
+        // Wait for processing delay (simulated or real response handling could be added)
+        // Ideally we listen for 'bundle_buy_response' but for now just staggering the requests
         const delayMs = (parseFloat(bundleBuyDelay) || 1) * 1000;
         await new Promise(resolve => setTimeout(resolve, delayMs));
 
         setProcessedBatches(prev => [...prev, batchIndex]);
       }
 
-      onToast('Bundle buy completed successfully!');
+      onToast('Bundle buy requests sent!');
 
       setIsBundleBuyRunning(false);
       setBundleBuyAbortController(null);
@@ -275,8 +299,8 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-400">
-                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="text-left">
@@ -286,7 +310,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
               </div>
             </div>
             <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity">
-              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
         </button>
@@ -297,45 +321,45 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]" onClick={handleBackdropClick}>
       <div className="bg-black/90 border border-amber-500/30 rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-            style={{
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(245, 158, 11, 0.3), 0 0 60px rgba(245, 158, 11, 0.2), 0 0 100px rgba(245, 158, 11, 0.1)',
-              filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
-            }}>
+        style={{
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(245, 158, 11, 0.3), 0 0 60px rgba(245, 158, 11, 0.2), 0 0 100px rgba(245, 158, 11, 0.1)',
+          filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
+        }}>
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-amber-500/20">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-400">
-                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="flex items-baseline gap-2">
               <h2 className="text-amber-300 font-mono font-semibold text-sm">Bundle Buy</h2>
               <span className="text-amber-500/60 text-xs font-mono">• Batch processing</span>
             </div>
-           </div>
-           <div className="flex items-center gap-0.5">
-             <button
-                onClick={() => {
-                  setIsMinimized(true);
-                  onMinimize?.();
-                }}
-               className="text-amber-400 hover:text-amber-300 transition-colors p-1.5 rounded hover:bg-amber-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
-               </svg>
-             </button>
-             <button
-               onClick={onClose}
-               className="text-amber-400 hover:text-amber-300 transition-colors p-1.5 rounded hover:bg-amber-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-               </svg>
-             </button>
-           </div>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => {
+                setIsMinimized(true);
+                onMinimize?.();
+              }}
+              className="text-amber-400 hover:text-amber-300 transition-colors p-1.5 rounded hover:bg-amber-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+              </svg>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-amber-400 hover:text-amber-300 transition-colors p-1.5 rounded hover:bg-amber-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -629,7 +653,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-yellow-400 bg-yellow-500/20 text-yellow-100 hover:bg-yellow-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Pause
               </button>
@@ -645,8 +669,8 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Resume ({bundleBuyBatches.slice(processedBatches.length).flat().length})
               </button>
@@ -657,8 +681,8 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-amber-400 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Start Bundle Buy
               </button>

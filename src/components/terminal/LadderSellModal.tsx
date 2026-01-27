@@ -22,6 +22,25 @@ interface LadderSellModalProps {
   positionIndex?: number;
   onMinimize?: () => void;
   onRestore?: () => void;
+  currentCoin: string;
+  buildPumpSellInstructions: (params: {
+    mintAddress: string;
+    tokenAmount: string;
+    walletPublicKey: string;
+    walletId: string;
+    slippage?: number;
+    protocol?: 'v1' | 'amm';
+    pairAddress?: string;
+  }) => Promise<{
+    success: boolean;
+    instructions?: any[];
+    tokenAmount?: string;
+    solAmount?: string;
+    error?: string;
+  }>;
+  slippage: string;
+  protocolType: 'v1' | 'amm' | null;
+  pairInfo: any;
 }
 
 const LadderSellModal: React.FC<LadderSellModalProps> = ({
@@ -34,7 +53,12 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
   setUseJito,
   positionIndex = 1,
   onMinimize,
-  onRestore
+  onRestore,
+  currentCoin,
+  buildPumpSellInstructions,
+  slippage,
+  protocolType,
+  pairInfo
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -80,8 +104,8 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
       setLadderSellAbortController(null);
       setLadderSellQueue([]);
       setProcessedLadderSellWallets([]);
-       setIsMinimized(false);
-       onRestore?.();
+      setIsMinimized(false);
+      onRestore?.();
     }
   }, [isOpen]);
 
@@ -187,30 +211,54 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
           continue;
         }
 
-        // Get wallet name for display
+        // Get wallet info
         const wallet = connectedWallets.find(w => w.id === walletId);
-        const walletName = wallet?.name || `Wallet ${walletId.slice(-4)}`;
+        if (!wallet) {
+          onToast(`❌ Wallet ${walletId} not found`);
+          setProcessedLadderSellWallets(prev => [...prev, walletId]);
+          continue;
+        }
 
-        // Simulate trade execution (replace with actual WSS trade request)
-        onToast(`Executing sell for ${walletName}: ${percentage}%`);
+        const walletName = wallet.name || `Wallet ${walletId.slice(-4)}`;
 
-        // Use exact percentage (no randomization in simplified version)
+        // Calculate token amount from percentage
+        const tokenAmount = (wallet.splBalance * percentage) / 100;
 
-        // TODO: Send actual trade request via WSS
-        // const tradeRequest = {
-        //   type: 'trade_request',
-        //   userId: operator?.userId?.toString() || 'unknown',
-        //   requestId: `trade_${Date.now()}`,
-        //   walletId,
-        //   tokenAddress: currentCoin,
-        //   percentage: percentage,
-        //   slippage: parseFloat(slippage),
-        //   useJito,
-        //   mode: 'sell'
-        // };
-        // wssConnection.send(JSON.stringify(tradeRequest));
+        // Skip if no tokens to sell
+        if (!wallet.splBalance || tokenAmount <= 0) {
+          onToast(`⚠️ ${walletName}: No tokens to sell`);
+          setProcessedLadderSellWallets(prev => [...prev, walletId]);
+          continue;
+        }
 
-        // Simulate processing delay with frequent cancellation checks
+        try {
+          // Execute actual sell trade via WSS
+          onToast(`💥 ${walletName}: Selling ${percentage}% (${tokenAmount.toFixed(2)} tokens)...`);
+
+          const result = await buildPumpSellInstructions({
+            mintAddress: currentCoin,
+            tokenAmount: tokenAmount.toString(),
+            walletPublicKey: wallet.publicKey,
+            walletId: walletId,
+            slippage: parseFloat(slippage) || 5,
+            protocol: protocolType || 'v1',
+            pairAddress: pairInfo?.pairAddress
+          });
+
+          if (!result.success) {
+            onToast(`❌ ${walletName}: ${result.error || 'Trade failed'}`);
+          }
+          // Success notification will come from WebSocket listener
+
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          onToast(`❌ ${walletName}: ${errorMsg}`);
+        }
+
+        // Mark as processed
+        setProcessedLadderSellWallets(prev => [...prev, walletId]);
+
+        // Delay before next wallet (with cancellation checks)
         const delayMs = (parseFloat(ladderSellDelay) || 1) * 1000;
         const checkInterval = 50; // Check every 50ms
 
@@ -222,21 +270,18 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
           const remainingDelay = Math.min(checkInterval, delayMs - elapsed);
           await new Promise(resolve => setTimeout(resolve, remainingDelay));
         }
-
-        // Mark as processed
-        setProcessedLadderSellWallets(prev => [...prev, walletId]);
       }
 
       // Remove processed wallets from queue
       setLadderSellQueue(prev => prev.filter(id => !processedLadderSellWallets.includes(id)));
 
-      onToast('Ladder sell completed successfully!');
+      onToast('✅ Ladder sell completed successfully!');
 
       setIsLadderSellRunning(false);
       setLadderSellAbortController(null);
     } catch (error) {
       console.error('Ladder sell error:', error);
-      onToast('Ladder sell failed');
+      onToast('❌ Ladder sell failed');
       setIsLadderSellRunning(false);
       setLadderSellAbortController(null);
     }
@@ -267,8 +312,8 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-red-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-red-400">
-                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="text-left">
@@ -278,7 +323,7 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
               </div>
             </div>
             <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
         </button>
@@ -289,45 +334,45 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]" onClick={handleBackdropClick}>
       <div className="bg-black/90 border border-red-500/30 rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{
-             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(239, 68, 68, 0.3), 0 0 60px rgba(239, 68, 68, 0.2), 0 0 100px rgba(239, 68, 68, 0.1)',
-             filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
-           }}>
+        style={{
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(239, 68, 68, 0.3), 0 0 60px rgba(239, 68, 68, 0.2), 0 0 100px rgba(239, 68, 68, 0.1)',
+          filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
+        }}>
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-red-500/20">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-red-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-red-400">
-                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="flex items-baseline gap-2">
               <h2 className="text-red-300 font-mono font-semibold text-sm">Ladder Sell</h2>
               <span className="text-red-500/60 text-xs font-mono">• Sequential processing</span>
             </div>
-           </div>
-           <div className="flex items-center gap-0.5">
-             <button
-                onClick={() => {
-                  setIsMinimized(true);
-                  onMinimize?.();
-                }}
-               className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded hover:bg-red-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
-               </svg>
-             </button>
-             <button
-               onClick={onClose}
-               className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded hover:bg-red-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-               </svg>
-             </button>
-           </div>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => {
+                setIsMinimized(true);
+                onMinimize?.();
+              }}
+              className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded hover:bg-red-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+              </svg>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded hover:bg-red-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -347,65 +392,65 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
               <div className="max-h-[420px] overflow-y-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {selectedWallets.map((walletId, index) => {
-                  const wallet = connectedWallets.find(w => w.id === walletId);
-                  const amount = ladderSellAmounts[walletId] || '';
-                  const isProcessed = processedLadderSellWallets.includes(walletId);
-                  const isQueued = ladderSellQueue.includes(walletId);
+                    const wallet = connectedWallets.find(w => w.id === walletId);
+                    const amount = ladderSellAmounts[walletId] || '';
+                    const isProcessed = processedLadderSellWallets.includes(walletId);
+                    const isQueued = ladderSellQueue.includes(walletId);
 
-                  return (
-                    <div
-                      key={walletId}
-                      className="bg-black/40 border border-red-500/30 rounded-lg p-3 hover:border-red-400/50 transition-colors min-h-[100px]"
-                    >
-                      {/* Compact Header */}
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-red-100 font-mono text-[11px] font-medium truncate">
-                            {wallet?.name || `Wallet ${index + 1}`}
+                    return (
+                      <div
+                        key={walletId}
+                        className="bg-black/40 border border-red-500/30 rounded-lg p-3 hover:border-red-400/50 transition-colors min-h-[100px]"
+                      >
+                        {/* Compact Header */}
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-red-100 font-mono text-[11px] font-medium truncate">
+                              {wallet?.name || `Wallet ${index + 1}`}
+                            </div>
+                            <div className="text-red-500/60 font-mono text-[10px] truncate">
+                              {wallet?.publicKey.slice(0, 4)}...{wallet?.publicKey.slice(-4)}
+                            </div>
                           </div>
-                          <div className="text-red-500/60 font-mono text-[10px] truncate">
-                            {wallet?.publicKey.slice(0, 4)}...{wallet?.publicKey.slice(-4)}
+
+                          {isProcessed ? (
+                            <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded-full bg-red-500/20 text-red-300 text-[10px] font-mono flex-shrink-0">
+                              ✓
+                            </span>
+                          ) : isQueued ? (
+                            <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 text-[10px] font-mono flex-shrink-0">
+                              ○
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* Compact Balances - Single Line */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-red-500/70 font-mono text-[10px]">SOL</span>
+                            <span className="text-red-100 font-mono text-[11px]">{wallet?.solBalance?.toFixed(3) || '0.000'}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-red-500/70 font-mono text-[10px]">SPL</span>
+                            <span className="text-red-100 font-mono text-[11px]">{wallet?.splBalance ? formatCompact(wallet.splBalance, 2) : '0'}</span>
                           </div>
                         </div>
 
-                        {isProcessed ? (
-                          <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded-full bg-red-500/20 text-red-300 text-[10px] font-mono flex-shrink-0">
-                            ✓
-                          </span>
-                        ) : isQueued ? (
-                          <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 text-[10px] font-mono flex-shrink-0">
-                            ○
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* Compact Balances - Single Line */}
-                      <div className="flex items-center justify-between mb-2">
+                        {/* Percentage Input */}
                         <div className="flex items-center gap-1">
-                          <span className="text-red-500/70 font-mono text-[10px]">SOL</span>
-                          <span className="text-red-100 font-mono text-[11px]">{wallet?.solBalance?.toFixed(3) || '0.000'}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-red-500/70 font-mono text-[10px]">SPL</span>
-                          <span className="text-red-100 font-mono text-[11px]">{wallet?.splBalance ? formatCompact(wallet.splBalance, 2) : '0'}</span>
+                          <input
+                            type="text"
+                            value={amount}
+                            onChange={(e) => handleIndividualAmountChange(walletId, e.target.value)}
+                            placeholder="100"
+                            className="w-14 rounded border border-red-500/30 bg-black/60 px-1.5 py-1 text-red-100 placeholder:text-red-500/40 focus:outline-none focus:border-red-400 text-[11px] text-center"
+                            disabled={isLadderSellRunning}
+                          />
+                          <span className="text-red-500/60 text-[10px] font-mono">%</span>
                         </div>
                       </div>
-
-                      {/* Percentage Input */}
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={amount}
-                          onChange={(e) => handleIndividualAmountChange(walletId, e.target.value)}
-                          placeholder="100"
-                          className="w-14 rounded border border-red-500/30 bg-black/60 px-1.5 py-1 text-red-100 placeholder:text-red-500/40 focus:outline-none focus:border-red-400 text-[11px] text-center"
-                          disabled={isLadderSellRunning}
-                        />
-                        <span className="text-red-500/60 text-[10px] font-mono">%</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -430,125 +475,125 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
                     Single percentage for all, or comma-separated for individual
                   </div>
                 </div>
-               </div>
+              </div>
 
-               {/* Settings */}
-               <div className="space-y-3">
-                 <h4 className="text-red-300 font-mono font-medium text-sm">Settings</h4>
+              {/* Settings */}
+              <div className="space-y-3">
+                <h4 className="text-red-300 font-mono font-medium text-sm">Settings</h4>
 
+                <div className="space-y-2">
+                  {/* Randomization Controls */}
                   <div className="space-y-2">
-                    {/* Randomization Controls */}
                     <div className="space-y-2">
-                      <div className="space-y-2">
-                        <label className="block text-red-300/80 font-mono text-xs font-medium">Random Percentages</label>
-                        <div className="flex items-end gap-2">
-                          <div className="flex-1">
-                            <label className="block text-red-300/80 font-mono text-xs mb-1">Min %</label>
-                            <input
-                              type="number"
-                              value={ladderSellMinPercentage}
-                              onChange={(e) => setLadderSellMinPercentage(Math.max(1, Math.min(100, parseInt(e.target.value) || 20)))}
-                              className="w-full rounded border border-red-500/30 bg-black/60 px-2 py-1.5 text-red-100 focus:outline-none focus:border-red-400 text-xs"
-                              disabled={isLadderSellRunning}
-                              min="1"
-                              max="100"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="block text-red-300/80 font-mono text-xs mb-1">Max %</label>
-                            <input
-                              type="number"
-                              value={ladderSellRandomPercentage}
-                              onChange={(e) => setLadderSellRandomPercentage(Math.max(1, Math.min(100, parseInt(e.target.value) || 60)))}
-                              className="w-full rounded border border-red-500/30 bg-black/60 px-2 py-1.5 text-red-100 focus:outline-none focus:border-red-400 text-xs"
-                              disabled={isLadderSellRunning}
-                              min="1"
-                              max="100"
-                            />
-                          </div>
-                          <button
-                            onClick={() => {
-                              const newAmounts: Record<string, string> = {};
-                              selectedWallets.forEach(walletId => {
-                                newAmounts[walletId] = calculateRandomizedPercentage(walletId);
-                              });
-                              setLadderSellAmounts(newAmounts);
-
-                              // Update main input to show all calculated percentages
-                              const amountsArray = selectedWallets.map(walletId => newAmounts[walletId] || '');
-                              setLadderSellAmount(amountsArray.join(','));
-                            }}
-                            className="px-3 py-1.5 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-100 text-xs font-mono transition-colors whitespace-nowrap"
+                      <label className="block text-red-300/80 font-mono text-xs font-medium">Random Percentages</label>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <label className="block text-red-300/80 font-mono text-xs mb-1">Min %</label>
+                          <input
+                            type="number"
+                            value={ladderSellMinPercentage}
+                            onChange={(e) => setLadderSellMinPercentage(Math.max(1, Math.min(100, parseInt(e.target.value) || 20)))}
+                            className="w-full rounded border border-red-500/30 bg-black/60 px-2 py-1.5 text-red-100 focus:outline-none focus:border-red-400 text-xs"
                             disabled={isLadderSellRunning}
-                          >
-                            🎲 Randomize
-                          </button>
+                            min="1"
+                            max="100"
+                          />
                         </div>
+                        <div className="flex-1">
+                          <label className="block text-red-300/80 font-mono text-xs mb-1">Max %</label>
+                          <input
+                            type="number"
+                            value={ladderSellRandomPercentage}
+                            onChange={(e) => setLadderSellRandomPercentage(Math.max(1, Math.min(100, parseInt(e.target.value) || 60)))}
+                            className="w-full rounded border border-red-500/30 bg-black/60 px-2 py-1.5 text-red-100 focus:outline-none focus:border-red-400 text-xs"
+                            disabled={isLadderSellRunning}
+                            min="1"
+                            max="100"
+                          />
+                        </div>
+                        <button
+                          onClick={() => {
+                            const newAmounts: Record<string, string> = {};
+                            selectedWallets.forEach(walletId => {
+                              newAmounts[walletId] = calculateRandomizedPercentage(walletId);
+                            });
+                            setLadderSellAmounts(newAmounts);
+
+                            // Update main input to show all calculated percentages
+                            const amountsArray = selectedWallets.map(walletId => newAmounts[walletId] || '');
+                            setLadderSellAmount(amountsArray.join(','));
+                          }}
+                          className="px-3 py-1.5 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-100 text-xs font-mono transition-colors whitespace-nowrap"
+                          disabled={isLadderSellRunning}
+                        >
+                          🎲 Randomize
+                        </button>
                       </div>
-
-                     <div className="flex items-center gap-2">
-                       <input
-                         type="checkbox"
-                         id="useTargetAmountSell"
-                         checked={useTargetAmountSell}
-                         onChange={(e) => setUseTargetAmountSell(e.target.checked)}
-                         disabled={isLadderSellRunning}
-                         className="rounded border border-red-500/30 bg-black/60 text-red-400 focus:outline-none focus:border-red-400"
-                       />
-                       <label htmlFor="useTargetAmountSell" className="text-red-300/80 font-mono text-xs">Use proportional target percentage</label>
-                     </div>
-
-                     {useTargetAmountSell && (
-                       <div className="flex items-center gap-2">
-                         <label className="text-red-300/80 font-mono text-xs font-medium whitespace-nowrap">Target</label>
-                         <input
-                           type="text"
-                           value={ladderSellTargetAmount}
-                           onChange={(e) => setLadderSellTargetAmount(e.target.value)}
-                           placeholder="100"
-                           className="w-20 rounded border border-red-500/30 bg-black/60 px-2 py-1 text-red-100 placeholder:text-red-500/40 focus:outline-none focus:border-red-400 text-xs"
-                           disabled={isLadderSellRunning}
-                         />
-                         <span className="text-red-300/80 font-mono text-xs">%</span>
-                         <span
-                           className="text-red-400/70 hover:text-red-300 text-xs cursor-help"
-                           title="Distributed proportionally by token balance + randomized within min/max %"
-                         >
-                           (?)
-                         </span>
-                       </div>
-                     )}
                     </div>
 
-                    <div className="pt-2 border-t border-red-500/20">
-                      <div className="flex items-center gap-3">
-                        <label className="text-red-300/80 font-mono text-xs font-medium whitespace-nowrap">Delay</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="useTargetAmountSell"
+                        checked={useTargetAmountSell}
+                        onChange={(e) => setUseTargetAmountSell(e.target.checked)}
+                        disabled={isLadderSellRunning}
+                        className="rounded border border-red-500/30 bg-black/60 text-red-400 focus:outline-none focus:border-red-400"
+                      />
+                      <label htmlFor="useTargetAmountSell" className="text-red-300/80 font-mono text-xs">Use proportional target percentage</label>
+                    </div>
+
+                    {useTargetAmountSell && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-red-300/80 font-mono text-xs font-medium whitespace-nowrap">Target</label>
                         <input
                           type="text"
-                          value={ladderSellDelay}
-                          onChange={(e) => setLadderSellDelay(e.target.value)}
-                          placeholder="1"
-                          className="w-10 rounded border border-red-500/30 bg-black/60 px-2 py-1 text-red-100 placeholder:text-red-500/40 focus:outline-none focus:border-red-400 text-xs"
+                          value={ladderSellTargetAmount}
+                          onChange={(e) => setLadderSellTargetAmount(e.target.value)}
+                          placeholder="100"
+                          className="w-20 rounded border border-red-500/30 bg-black/60 px-2 py-1 text-red-100 placeholder:text-red-500/40 focus:outline-none focus:border-red-400 text-xs"
                           disabled={isLadderSellRunning}
                         />
-                        <span className="text-red-500/60 text-xs font-mono">sec</span>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            id="useJitoSell"
-                            checked={useJito}
-                            onChange={(e) => setUseJito(e.target.checked)}
-                            disabled={isLadderSellRunning}
-                            className="rounded border border-red-500/30 bg-black/60 text-red-400 focus:outline-none focus:border-red-400"
-                          />
-                          <label htmlFor="useJitoSell" className="text-red-300/80 font-mono text-xs cursor-pointer">Jito</label>
-                        </div>
+                        <span className="text-red-300/80 font-mono text-xs">%</span>
+                        <span
+                          className="text-red-400/70 hover:text-red-300 text-xs cursor-help"
+                          title="Distributed proportionally by token balance + randomized within min/max %"
+                        >
+                          (?)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-red-500/20">
+                    <div className="flex items-center gap-3">
+                      <label className="text-red-300/80 font-mono text-xs font-medium whitespace-nowrap">Delay</label>
+                      <input
+                        type="text"
+                        value={ladderSellDelay}
+                        onChange={(e) => setLadderSellDelay(e.target.value)}
+                        placeholder="1"
+                        className="w-10 rounded border border-red-500/30 bg-black/60 px-2 py-1 text-red-100 placeholder:text-red-500/40 focus:outline-none focus:border-red-400 text-xs"
+                        disabled={isLadderSellRunning}
+                      />
+                      <span className="text-red-500/60 text-xs font-mono">sec</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          id="useJitoSell"
+                          checked={useJito}
+                          onChange={(e) => setUseJito(e.target.checked)}
+                          disabled={isLadderSellRunning}
+                          className="rounded border border-red-500/30 bg-black/60 text-red-400 focus:outline-none focus:border-red-400"
+                        />
+                        <label htmlFor="useJitoSell" className="text-red-300/80 font-mono text-xs cursor-pointer">Jito</label>
                       </div>
                     </div>
                   </div>
-               </div>
+                </div>
+              </div>
 
-               {/* Summary */}
+              {/* Summary */}
               {selectedWallets.length > 0 && (
                 <div className="p-3 bg-red-500/5 rounded-lg border border-red-500/20">
                   <h5 className="text-red-300 font-mono font-medium text-xs mb-2">Process Summary</h5>
@@ -608,7 +653,7 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-yellow-400 bg-yellow-500/20 text-yellow-100 hover:bg-yellow-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Pause
               </button>
@@ -624,8 +669,8 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-red-400 bg-red-500/20 text-red-100 hover:bg-red-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Resume ({selectedWallets.filter(id => !processedLadderSellWallets.includes(id)).length})
               </button>
@@ -638,8 +683,8 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-red-400 bg-red-500/20 text-red-100 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Start Ladder Sell
               </button>

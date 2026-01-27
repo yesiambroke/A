@@ -20,6 +20,8 @@ interface GatherSolModalProps {
   positionIndex?: number;
   onMinimize?: () => void;
   onRestore?: () => void;
+  wssConnection: WebSocket | null;
+  userId: string;
 }
 
 const GatherSolModal: React.FC<GatherSolModalProps> = ({
@@ -30,7 +32,9 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
   onToast,
   positionIndex = 3,
   onMinimize,
-  onRestore
+  onRestore,
+  wssConnection,
+  userId
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -99,87 +103,41 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
       return;
     }
 
+    if (!wssConnection || wssConnection.readyState !== WebSocket.OPEN) {
+      onToast('WebSocket not connected');
+      return;
+    }
+
     setIsGatheringSol(true);
     setIsCancelled(false);
-
-    // Reset queues for fresh execution (allows retries)
-    setGatherSolQueue(senderWallets);
-    setGatheredWallets([]);
-
-    const abortController = new AbortController();
-    setGatherSolAbortController(abortController);
 
     const receiverWallet = connectedWallets.find(w => w.id === receiverWalletId);
     const receiverName = receiverWallet?.name || `Wallet ${receiverWalletId.slice(-4)}`;
 
-    // Create batches of 5 wallets each
-    const batches: string[][] = [];
-    for (let i = 0; i < senderWallets.length; i += 5) {
-      batches.push(senderWallets.slice(i, i + 5));
-    }
+    onToast(`Broadcasting Gather SOL request for ${senderWallets.length} wallets...`);
 
-    onToast(`Starting SOL gathering to ${receiverName} (${batches.length} batches, ${senderWallets.length} transfers)...`);
+    const requestId = `gather_sol_${Date.now()}`;
 
-    try {
-      for (const batch of batches) {
-        if (abortController.signal.aborted) {
-          return;
-        }
+    // Send request to backend
+    // Backend will handle packing 7 transfers per tx and 5 txs per bundle (35 wallets/bundle)
+    const payload = {
+      type: 'gather_sol_request',
+      userId: userId,
+      requestId: requestId,
+      wallets: senderWallets, // Send ALL wallets
+      receiver: receiverWalletId
+    };
 
-        // Process batch of up to 5 wallets
-        const batchTransfers = batch.map(senderWalletId => {
-          const senderWallet = connectedWallets.find(w => w.id === senderWalletId);
-          if (!senderWallet) return null;
+    wssConnection.send(JSON.stringify(payload));
 
-          const amount = senderWallet.solBalance;
-          if (amount <= 0.001) return null; // Skip wallets with very low balance
+    // Optimistic UI updates could go here, but we wait for response usually.
+    // For now, simpler to just show "Request Sent" and reset.
+    // We can listen for 'gather_sol_response' but TradingTerminal handles toasts globally usually.
 
-          return {
-            senderWalletId,
-            senderName: senderWallet.name || `Wallet ${senderWalletId.slice(-4)}`,
-            amount
-          };
-        }).filter(Boolean);
-
-        if (batchTransfers.length > 0) {
-          // Send batch transfer request
-          onToast(`Processing batch: ${batchTransfers.length} transfers to ${receiverName}`);
-
-          // TODO: Send actual batch SOL transfer request via WSS
-          // const batchTransferRequest = {
-          //   type: 'batch_sol_transfer_request',
-          //   userId: operator?.userId?.toString() || 'unknown',
-          //   requestId: `batch_transfer_${Date.now()}`,
-          //   transfers: batchTransfers.map(transfer => ({
-          //     fromWalletId: transfer.senderWalletId,
-          //     toWalletId: receiverWalletId,
-          //     amount: transfer.amount
-          //   }))
-          // };
-          // wssConnection.send(JSON.stringify(batchTransferRequest));
-
-          // Simulate processing delay for batch
-          await new Promise(resolve => setTimeout(resolve, 1500));
-
-          // Mark batch wallets as processed
-          setGatheredWallets(prev => [...prev, ...batchTransfers.map(t => t!.senderWalletId)]);
-        }
-      }
-
-      const totalTransfers = senderWallets.filter(id => {
-        const wallet = connectedWallets.find(w => w.id === id);
-        return wallet && wallet.solBalance > 0.001;
-      }).length;
-
-      onToast(`SOL gathering completed! ${totalTransfers} transfers processed in ${batches.length} batches.`);
+    setTimeout(() => {
       setIsGatheringSol(false);
-      setGatherSolAbortController(null);
-    } catch (error) {
-      console.error('Gather SOL error:', error);
-      onToast('SOL gathering failed');
-      setIsGatheringSol(false);
-      setGatherSolAbortController(null);
-    }
+      onToast('Gather request sent to server!');
+    }, 1000);
   };
 
   if (!isOpen) return null;
@@ -207,7 +165,7 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-cyan-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-cyan-400">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="text-left">
@@ -217,7 +175,7 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
               </div>
             </div>
             <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity">
-              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
         </button>
@@ -228,44 +186,44 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]" onClick={handleBackdropClick}>
       <div className="bg-black/90 border border-cyan-500/30 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-            style={{
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(6, 182, 212, 0.3), 0 0 60px rgba(6, 182, 212, 0.2), 0 0 100px rgba(6, 182, 212, 0.1)',
-              filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
-            }}>
+        style={{
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(6, 182, 212, 0.3), 0 0 60px rgba(6, 182, 212, 0.2), 0 0 100px rgba(6, 182, 212, 0.1)',
+          filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
+        }}>
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-cyan-500/20">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-cyan-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-cyan-400">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="flex items-baseline gap-2">
               <h2 className="text-cyan-300 font-mono font-semibold text-sm">Gather SOL</h2>
               <span className="text-cyan-500/60 text-xs font-mono">• Consolidate funds</span>
             </div>
-           </div>
-           <div className="flex items-center gap-0.5">
-             <button
-               onClick={() => {
-                 setIsMinimized(true);
-                 onMinimize?.();
-               }}
-               className="text-cyan-400 hover:text-cyan-300 transition-colors p-1.5 rounded hover:bg-cyan-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
-               </svg>
-             </button>
-             <button
-               onClick={onClose}
-               className="text-cyan-400 hover:text-cyan-300 transition-colors p-1.5 rounded hover:bg-cyan-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-               </svg>
-             </button>
-           </div>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => {
+                setIsMinimized(true);
+                onMinimize?.();
+              }}
+              className="text-cyan-400 hover:text-cyan-300 transition-colors p-1.5 rounded hover:bg-cyan-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+              </svg>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-cyan-400 hover:text-cyan-300 transition-colors p-1.5 rounded hover:bg-cyan-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -289,9 +247,8 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
                     return (
                       <div
                         key={walletId}
-                        className={`bg-black/40 border rounded-lg p-3 hover:border-cyan-400/50 transition-colors min-h-[100px] cursor-pointer ${
-                          isReceiver ? 'border-cyan-400 shadow-lg shadow-cyan-500/20' : 'border-cyan-500/30'
-                        }`}
+                        className={`bg-black/40 border rounded-lg p-3 hover:border-cyan-400/50 transition-colors min-h-[100px] cursor-pointer ${isReceiver ? 'border-cyan-400 shadow-lg shadow-cyan-500/20' : 'border-cyan-500/30'
+                          }`}
                         onClick={() => setReceiverWalletId(isReceiver ? '' : walletId)}
                       >
                         {/* Header */}
@@ -316,11 +273,10 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
 
                         {/* Role Indicator */}
                         <div className="flex items-center gap-1">
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                            isReceiver
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${isReceiver
                               ? 'bg-cyan-500/20 text-cyan-300'
                               : 'bg-gray-500/20 text-gray-400'
-                          }`}>
+                            }`}>
                             {isReceiver ? '🎯 Receiver' : 'Sender'}
                           </span>
                         </div>
@@ -399,7 +355,7 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-yellow-400 bg-yellow-500/20 text-yellow-100 hover:bg-yellow-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Pause
               </button>
@@ -410,7 +366,7 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-cyan-400 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 {isGatheringSol ? 'Gathering...' : 'Start Gather SOL'}
               </button>

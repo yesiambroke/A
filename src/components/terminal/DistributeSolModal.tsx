@@ -20,6 +20,8 @@ interface DistributeSolModalProps {
   positionIndex?: number;
   onMinimize?: () => void;
   onRestore?: () => void;
+  wssConnection: WebSocket | null;
+  userId: string;
 }
 
 const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
@@ -30,7 +32,9 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
   onToast,
   positionIndex = 4,
   onMinimize,
-  onRestore
+  onRestore,
+  wssConnection,
+  userId
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -169,54 +173,37 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
 
     const senderName = senderWallet.name || `Wallet ${senderWalletId.slice(-4)}`;
 
-    onToast(`Starting SOL distribution from ${senderName}...`);
+    onToast(`Broadcasting Distribute SOL request to backend...`);
 
     try {
-      for (const recipientWalletId of recipients) {
-        if (abortController.signal.aborted) {
-          return;
-        }
+      const requestId = `distribute_sol_${Date.now()}`;
 
-        const amount = parseFloat(distributeAmounts[recipientWalletId] || '0');
-        if (amount <= 0) {
-          setDistributedWallets(prev => [...prev, recipientWalletId]);
-          continue;
-        }
+      const payload = {
+        type: 'distribute_sol_request',
+        userId: userId,
+        requestId: requestId,
+        senderId: senderWalletId,
+        recipients: recipients.map(id => ({
+          walletId: id,
+          amount: parseFloat(distributeAmounts[id] || '0')
+        }))
+      };
 
-        const recipientWallet = connectedWallets.find(w => w.id === recipientWalletId);
-        if (!recipientWallet) continue;
-
-        const recipientName = recipientWallet.name || `Wallet ${recipientWalletId.slice(-4)}`;
-
-        // Simulate SOL transfer
-        onToast(`Transferring ${amount.toFixed(3)} SOL to ${recipientName}`);
-
-        // TODO: Send actual SOL transfer request via WSS
-        // const transferRequest = {
-        //   type: 'sol_transfer_request',
-        //   userId: operator?.userId?.toString() || 'unknown',
-        //   requestId: `transfer_${Date.now()}`,
-        //   fromWalletId: senderWalletId,
-        //   toWalletId: recipientWalletId,
-        //   amount: amount
-        // };
-        // wssConnection.send(JSON.stringify(transferRequest));
-
-        // Simulate processing delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        setDistributedWallets(prev => [...prev, recipientWalletId]);
+      if (wssConnection && wssConnection.readyState === WebSocket.OPEN) {
+        wssConnection.send(JSON.stringify(payload));
+        onToast('Distribution request sent. The server will coordinate the sequential magic transfers. 🪄');
+      } else {
+        throw new Error('WebSocket not connected');
       }
 
-      const validTransfers = recipients.filter(id => parseFloat(distributeAmounts[id] || '0') > 0).length;
-      onToast(`SOL distribution completed! ${validTransfers} transfers processed.`);
-      setIsDistributing(false);
-      setDistributeAbortController(null);
+      // Reset local state
+      setTimeout(() => {
+        setIsDistributing(false);
+      }, 2000);
+
     } catch (error) {
-      console.error('Distribute SOL error:', error);
-      onToast('SOL distribution failed');
+      onToast(`Distribution failed!`);
       setIsDistributing(false);
-      setDistributeAbortController(null);
     }
   };
 
@@ -244,9 +231,9 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
         >
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-purple-500/20 flex items-center justify-center">
-               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-purple-400">
-                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-purple-400">
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </div>
             <div className="text-left">
@@ -256,7 +243,7 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
               </div>
             </div>
             <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity">
-              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
         </button>
@@ -267,45 +254,45 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]" onClick={handleBackdropClick}>
       <div className="bg-black/90 border border-purple-500/30 rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-            style={{
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(147, 51, 234, 0.3), 0 0 60px rgba(147, 51, 234, 0.2), 0 0 100px rgba(147, 51, 234, 0.1)',
-              filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
-            }}>
-         {/* Header */}
-         <div className="flex items-center justify-between p-3 border-b border-purple-500/20">
-           <div className="flex items-center gap-2">
-             <div className="w-6 h-6 rounded bg-purple-500/20 flex items-center justify-center">
+        style={{
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(147, 51, 234, 0.3), 0 0 60px rgba(147, 51, 234, 0.2), 0 0 100px rgba(147, 51, 234, 0.1)',
+          filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
+        }}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-purple-500/20">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-purple-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-purple-400">
-                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
-             </div>
+            </div>
             <div className="flex items-baseline gap-2">
               <h2 className="text-purple-300 font-mono font-semibold text-sm">Distribute SOL</h2>
               <span className="text-purple-500/60 text-xs font-mono">• Send to multiple wallets</span>
             </div>
-           </div>
-           <div className="flex items-center gap-0.5">
-             <button
-               onClick={() => {
-                 setIsMinimized(true);
-                 onMinimize?.();
-               }}
-               className="text-purple-400 hover:text-purple-300 transition-colors p-1.5 rounded hover:bg-purple-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
-               </svg>
-             </button>
-             <button
-               onClick={onClose}
-               className="text-purple-400 hover:text-purple-300 transition-colors p-1.5 rounded hover:bg-purple-500/10"
-             >
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-               </svg>
-             </button>
-           </div>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => {
+                setIsMinimized(true);
+                onMinimize?.();
+              }}
+              className="text-purple-400 hover:text-purple-300 transition-colors p-1.5 rounded hover:bg-purple-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+              </svg>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-purple-400 hover:text-purple-300 transition-colors p-1.5 rounded hover:bg-purple-500/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -329,9 +316,8 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
                     return (
                       <div
                         key={walletId}
-                        className={`bg-black/40 border rounded-lg p-3 hover:border-purple-400/50 transition-colors min-h-[100px] cursor-pointer ${
-                          isSender ? 'border-purple-400 shadow-lg shadow-purple-500/20' : 'border-purple-500/30'
-                        }`}
+                        className={`bg-black/40 border rounded-lg p-3 hover:border-purple-400/50 transition-colors min-h-[100px] cursor-pointer ${isSender ? 'border-purple-400 shadow-lg shadow-purple-500/20' : 'border-purple-500/30'
+                          }`}
                         onClick={() => setSenderWalletId(isSender ? '' : walletId)}
                       >
                         {/* Compact Header */}
@@ -371,11 +357,10 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
 
                         {/* Role Indicator */}
                         <div className="flex items-center gap-1">
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                            isSender
-                              ? 'bg-purple-500/20 text-purple-300'
-                              : 'bg-gray-500/20 text-gray-400'
-                          }`}>
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${isSender
+                            ? 'bg-purple-500/20 text-purple-300'
+                            : 'bg-gray-500/20 text-gray-400'
+                            }`}>
                             {isSender ? 'Sender' : 'Recipient'}
                           </span>
                         </div>
@@ -471,7 +456,7 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-yellow-400 bg-yellow-500/20 text-yellow-100 hover:bg-yellow-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Pause
               </button>
@@ -486,8 +471,8 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-purple-400 bg-purple-500/20 text-purple-100 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                  <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
                 Start Distribute SOL
               </button>

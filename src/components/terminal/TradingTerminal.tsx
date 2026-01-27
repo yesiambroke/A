@@ -25,37 +25,37 @@ const INSIGHTX_API_KEY =
 const CustomIcons = {
   insider: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M5 16L3 5l3.5 2L12 3l5.5 4L21 5l-2 11H5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M5 16L3 5l3.5 2L12 3l5.5 4L21 5l-2 11H5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   ),
 
   bundler: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-      <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2"/>
-      <line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" strokeWidth="2"/>
-      <line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" strokeWidth="2"/>
+      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
+      <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2" />
+      <line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" strokeWidth="2" />
+      <line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" strokeWidth="2" />
     </svg>
   ),
 
   sniper: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-      <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2"/>
-      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2"/>
-      <line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" strokeWidth="2"/>
-      <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="2"/>
-      <line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" strokeWidth="2"/>
-      <line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2"/>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2" />
+      <line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" strokeWidth="2" />
+      <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="2" />
+      <line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" strokeWidth="2" />
+      <line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" />
     </svg>
   ),
 
   slippage: (
     <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-      <path d="M3 12h18M3 12l3-3m-3 3l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M9 8l2-2 2 2M9 16l2 2 2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M15 6v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M3 12h18M3 12l3-3m-3 3l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 8l2-2 2 2M9 16l2 2 2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 6v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 };
@@ -86,84 +86,84 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const [useJito, setUseJito] = useState<boolean>(true); // Default Jito enabled
   const [showSlippageTooltip, setShowSlippageTooltip] = useState(false);
 
-    // Ladder Buy modal state
-    const [showLadderBuyModal, setShowLadderBuyModal] = useState(false);
-    const [showLadderSellModal, setShowLadderSellModal] = useState(false);
-    const [showBundleBuyModal, setShowBundleBuyModal] = useState(false);
-    const [showGatherSolModal, setShowGatherSolModal] = useState(false);
-    const [showDistributeSolModal, setShowDistributeSolModal] = useState(false);
-    const [showWarmUpWalletModal, setShowWarmUpWalletModal] = useState(false);
+  // Ladder Buy modal state
+  const [showLadderBuyModal, setShowLadderBuyModal] = useState(false);
+  const [showLadderSellModal, setShowLadderSellModal] = useState(false);
+  const [showBundleBuyModal, setShowBundleBuyModal] = useState(false);
+  const [showGatherSolModal, setShowGatherSolModal] = useState(false);
+  const [showDistributeSolModal, setShowDistributeSolModal] = useState(false);
+  const [showWarmUpWalletModal, setShowWarmUpWalletModal] = useState(false);
 
-    // Minimized modal tracking for positioning
-    const [minimizedModals, setMinimizedModals] = useState<Set<string>>(new Set());
+  // Minimized modal tracking for positioning
+  const [minimizedModals, setMinimizedModals] = useState<Set<string>>(new Set());
 
-    // Minimize/Restore handlers for dynamic positioning
-    const handleLadderBuyMinimize = () => {
-      setMinimizedModals(prev => new Set([...prev, 'ladderBuy']));
-    };
-    const handleLadderBuyRestore = () => {
-      setMinimizedModals(prev => {
-        const newSet = new Set(prev);
-        newSet.delete('ladderBuy');
-        return newSet;
-      });
-    };
-    const handleLadderSellMinimize = () => {
-      setMinimizedModals(prev => new Set([...prev, 'ladderSell']));
-    };
-    const handleLadderSellRestore = () => {
-      setMinimizedModals(prev => {
-        const newSet = new Set(prev);
-        newSet.delete('ladderSell');
-        return newSet;
-      });
-    };
-    const handleBundleBuyMinimize = () => {
-      setMinimizedModals(prev => new Set([...prev, 'bundleBuy']));
-    };
-    const handleBundleBuyRestore = () => {
-      setMinimizedModals(prev => {
-        const newSet = new Set(prev);
-        newSet.delete('bundleBuy');
-        return newSet;
-      });
-    };
-    const handleGatherSolMinimize = () => {
-      setMinimizedModals(prev => new Set([...prev, 'gatherSol']));
-    };
-    const handleGatherSolRestore = () => {
-      setMinimizedModals(prev => {
-        const newSet = new Set(prev);
-        newSet.delete('gatherSol');
-        return newSet;
-      });
-    };
-    const handleDistributeSolMinimize = () => {
-      setMinimizedModals(prev => new Set([...prev, 'distributeSol']));
-    };
-    const handleDistributeSolRestore = () => {
-      setMinimizedModals(prev => {
-        const newSet = new Set(prev);
-        newSet.delete('distributeSol');
-        return newSet;
-      });
-    };
-    const handleWarmUpWalletMinimize = () => {
-      setMinimizedModals(prev => new Set([...prev, 'warmUpWallet']));
-    };
-    const handleWarmUpWalletRestore = () => {
-      setMinimizedModals(prev => {
-        const newSet = new Set(prev);
-        newSet.delete('warmUpWallet');
-        return newSet;
-      });
-    };
+  // Minimize/Restore handlers for dynamic positioning
+  const handleLadderBuyMinimize = () => {
+    setMinimizedModals(prev => new Set([...prev, 'ladderBuy']));
+  };
+  const handleLadderBuyRestore = () => {
+    setMinimizedModals(prev => {
+      const newSet = new Set(prev);
+      newSet.delete('ladderBuy');
+      return newSet;
+    });
+  };
+  const handleLadderSellMinimize = () => {
+    setMinimizedModals(prev => new Set([...prev, 'ladderSell']));
+  };
+  const handleLadderSellRestore = () => {
+    setMinimizedModals(prev => {
+      const newSet = new Set(prev);
+      newSet.delete('ladderSell');
+      return newSet;
+    });
+  };
+  const handleBundleBuyMinimize = () => {
+    setMinimizedModals(prev => new Set([...prev, 'bundleBuy']));
+  };
+  const handleBundleBuyRestore = () => {
+    setMinimizedModals(prev => {
+      const newSet = new Set(prev);
+      newSet.delete('bundleBuy');
+      return newSet;
+    });
+  };
+  const handleGatherSolMinimize = () => {
+    setMinimizedModals(prev => new Set([...prev, 'gatherSol']));
+  };
+  const handleGatherSolRestore = () => {
+    setMinimizedModals(prev => {
+      const newSet = new Set(prev);
+      newSet.delete('gatherSol');
+      return newSet;
+    });
+  };
+  const handleDistributeSolMinimize = () => {
+    setMinimizedModals(prev => new Set([...prev, 'distributeSol']));
+  };
+  const handleDistributeSolRestore = () => {
+    setMinimizedModals(prev => {
+      const newSet = new Set(prev);
+      newSet.delete('distributeSol');
+      return newSet;
+    });
+  };
+  const handleWarmUpWalletMinimize = () => {
+    setMinimizedModals(prev => new Set([...prev, 'warmUpWallet']));
+  };
+  const handleWarmUpWalletRestore = () => {
+    setMinimizedModals(prev => {
+      const newSet = new Set(prev);
+      newSet.delete('warmUpWallet');
+      return newSet;
+    });
+  };
 
-    // Calculate position index for each modal
-    const getPositionIndex = (modalType: string) => {
-      const minimizedArray = Array.from(minimizedModals);
-      return minimizedArray.indexOf(modalType);
-    };
+  // Calculate position index for each modal
+  const getPositionIndex = (modalType: string) => {
+    const minimizedArray = Array.from(minimizedModals);
+    return minimizedArray.indexOf(modalType);
+  };
 
   const [showBetaOverlay, setShowBetaOverlay] = useState(false);
   const [timeFormat, setTimeFormat] = useState<'absolute' | 'relative'>('absolute');
@@ -212,22 +212,22 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     setTimeout(() => setToastMessage(null), 3000); // Extended to 3 seconds for links
   };
   const [wssConnection, setWssConnection] = useState<WebSocket | null>(null);
-   const searchParams = useSearchParams();
-   const router = useRouter();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-   // Redirect to screener if no coin parameter
-   if (!searchParams.get('coin')) {
-     React.useEffect(() => {
-       router.push('/screener');
-     }, [router]);
-     return (
-       <div className="min-h-screen bg-black flex items-center justify-center text-green-400 font-mono">
-         Redirecting to screener...
-       </div>
-     );
-   }
+  // Redirect to screener if no coin parameter
+  if (!searchParams.get('coin')) {
+    React.useEffect(() => {
+      router.push('/screener');
+    }, [router]);
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-green-400 font-mono">
+        Redirecting to screener...
+      </div>
+    );
+  }
 
-   const { subscribeToTrades, isConnected, marketData, fetchRecentTrades } = useMarketData();
+  const { subscribeToTrades, isConnected, marketData, fetchRecentTrades } = useMarketData();
   const tradeUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Load saved layout preferences
@@ -274,7 +274,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
         // Now connect to WebSocket with authenticated session
         const LIGHT_WSS_URL = process.env.NEXT_PUBLIC_LIGHT_WSS_URL ||
-                              (process.env.NODE_ENV === 'production' ? 'wss://light.a-trade.fun' : 'ws://localhost:4128');
+          (process.env.NODE_ENV === 'production' ? 'wss://light.a-trade.fun' : 'ws://localhost:4128');
         const ws = new WebSocket(`${LIGHT_WSS_URL}?sessionId=${authData.sessionId}`);
 
         ws.onopen = () => {
@@ -302,83 +302,83 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
               ws.close();
 
             } else if (data.type === 'wallet_data_response' && data.success) {
-                console.log('📥 Received wallet data response:', data);
-                const wallets = data.wallets || [];
-                setConnectedWallets(wallets);
-                console.log('🔄 Updated connectedWallets:', wallets.length, 'wallets');
+              console.log('📥 Received wallet data response:', data);
+              const wallets = data.wallets || [];
+              setConnectedWallets(wallets);
+              console.log('🔄 Updated connectedWallets:', wallets.length, 'wallets');
 
-                if (wallets.length > 0 && selectedWallets.length === 0) {
-                  setSelectedWallets([wallets[0].id]);
-                  console.log('🎯 Auto-selected first wallet:', wallets[0].name);
-                }
+              if (wallets.length > 0 && selectedWallets.length === 0) {
+                setSelectedWallets([wallets[0].id]);
+                console.log('🎯 Auto-selected first wallet:', wallets[0].name);
+              }
 
-                // Ensure status is connected when we have wallet data
-                if (wallets.length > 0) {
-                  setWalletConnectionStatus('connected');
-                  console.log('🔄 Set wallet connection status to connected (have wallets)');
-                }
-              } else if (data.type === 'wallet_update') {
-                console.log('📥 Received wallet update:', data);
-                console.log('🔄 Updating wallets from', connectedWallets.length, 'to', data.wallets?.length || 0, 'wallets');
+              // Ensure status is connected when we have wallet data
+              if (wallets.length > 0) {
+                setWalletConnectionStatus('connected');
+                console.log('🔄 Set wallet connection status to connected (have wallets)');
+              }
+            } else if (data.type === 'wallet_update') {
+              console.log('📥 Received wallet update:', data);
+              console.log('🔄 Updating wallets from', connectedWallets.length, 'to', data.wallets?.length || 0, 'wallets');
 
-                const previousWallets = connectedWallets;
-                const newWallets = data.wallets || [];
+              const previousWallets = connectedWallets;
+              const newWallets = data.wallets || [];
 
-                setConnectedWallets(newWallets);
+              setConnectedWallets(newWallets);
 
-                // Log wallet changes for debugging
-                const previousIds = new Set(previousWallets.map((w: any) => w.id));
-                const newIds = new Set(newWallets.map((w: any) => w.id));
-                const addedWallets = newWallets.filter((w: any) => !previousIds.has(w.id));
-                const removedWallets = previousWallets.filter((w: any) => !newIds.has(w.id));
+              // Log wallet changes for debugging
+              const previousIds = new Set(previousWallets.map((w: any) => w.id));
+              const newIds = new Set(newWallets.map((w: any) => w.id));
+              const addedWallets = newWallets.filter((w: any) => !previousIds.has(w.id));
+              const removedWallets = previousWallets.filter((w: any) => !newIds.has(w.id));
 
-                if (addedWallets.length > 0) {
-                  console.log('➕ Added wallets:', addedWallets.map((w: any) => `${w.name} (${w.id})`));
-                }
-                if (removedWallets.length > 0) {
-                  console.log('➖ Removed wallets:', removedWallets.map((w: any) => `${w.name} (${w.id})`));
-                }
+              if (addedWallets.length > 0) {
+                console.log('➕ Added wallets:', addedWallets.map((w: any) => `${w.name} (${w.id})`));
+              }
+              if (removedWallets.length > 0) {
+                console.log('➖ Removed wallets:', removedWallets.map((w: any) => `${w.name} (${w.id})`));
+              }
 
-                // Update selected wallets - keep only existing ones
-                if (newWallets.length > 0) {
-                  const existingWalletIds = newWallets.map((w: any) => w.id);
-                  setSelectedWallets(prev => {
-                    const filtered = prev.filter(id => existingWalletIds.includes(id));
-                    if (filtered.length !== prev.length) {
-                      console.log('🔄 Filtered selected wallets from', prev.length, 'to', filtered.length);
-                    }
-                    return filtered;
-                  });
+              // Update selected wallets - keep only existing ones
+              if (newWallets.length > 0) {
+                const existingWalletIds = newWallets.map((w: any) => w.id);
+                setSelectedWallets(prev => {
+                  const filtered = prev.filter(id => existingWalletIds.includes(id));
+                  if (filtered.length !== prev.length) {
+                    console.log('🔄 Filtered selected wallets from', prev.length, 'to', filtered.length);
+                  }
+                  return filtered;
+                });
 
-                  // Auto-select first wallet if none selected
-                  setSelectedWallets(prev => {
-                    if (prev.length === 0 && newWallets.length > 0) {
-                      console.log('🎯 Auto-selecting first wallet:', newWallets[0].name);
-                      return [newWallets[0].id];
-                    }
-                    return prev;
-                  });
-                } else {
-                  console.log('📭 No wallets remaining, clearing selection');
-                  setSelectedWallets([]);
-                }
+                // Auto-select first wallet if none selected
+                setSelectedWallets(prev => {
+                  if (prev.length === 0 && newWallets.length > 0) {
+                    console.log('🎯 Auto-selecting first wallet:', newWallets[0].name);
+                    return [newWallets[0].id];
+                  }
+                  return prev;
+                });
+              } else {
+                console.log('📭 No wallets remaining, clearing selection');
+                setSelectedWallets([]);
+              }
 
-                console.log('✅ Wallet update complete. Total wallets:', newWallets.length);
+              console.log('✅ Wallet update complete. Total wallets:', newWallets.length);
             } else if (data.type === 'wallet_client_disconnected') {
-                console.log('🔌 Received wallet client disconnection notification:', data);
-                setWalletConnectionStatus('disconnected');
-                console.log('🔄 Updated wallet connection status to disconnected due to wallet client disconnect');
+              console.log('🔌 Received wallet client disconnection notification:', data);
+              setWalletConnectionStatus('disconnected');
+              console.log('🔄 Updated wallet connection status to disconnected due to wallet client disconnect');
             } else if (data.type === 'wallet_client_connected') {
-                console.log('🔌 Received wallet client connection notification:', data);
-                // Request wallet data when wallet client connects
-                const request = {
-                  type: 'wallet_data_request',
-                  userId: operator?.userId?.toString() || 'unknown',
-                  requestId: `wallet_connect_${Date.now()}`,
-                  currentCoin: currentCoin
-                };
-                console.log('📤 Requesting wallet data after wallet client connected:', request);
-                ws.send(JSON.stringify(request));
+              console.log('🔌 Received wallet client connection notification:', data);
+              // Request wallet data when wallet client connects
+              const request = {
+                type: 'wallet_data_request',
+                userId: operator?.userId?.toString() || 'unknown',
+                requestId: `wallet_connect_${Date.now()}`,
+                currentCoin: currentCoin
+              };
+              console.log('📤 Requesting wallet data after wallet client connected:', request);
+              ws.send(JSON.stringify(request));
             } else if (data.type === 'balance_update') {
               console.log('💰 Received balance update:', data.wallets);
               // Update wallet balances without replacing the entire wallet list
@@ -446,6 +446,18 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                 }));
               } else {
                 showToast(`❌ Transaction failed: ${data.error}`);
+              }
+            } else if (data.type === 'nuke_response') {
+              if (data.success) {
+                showToast(`✅ ${data.message || 'Nuke request processed'}`);
+              } else {
+                showToast(`❌ Nuke failed: ${data.error}`);
+              }
+            } else if (data.type === 'nuke_gather_complete') {
+              if (data.success) {
+                showToast(`✅ Gathered ${data.walletsProcessed} wallets - ${data.message}`);
+              } else {
+                showToast(`❌ Nuke gather failed: ${data.error}`);
               }
             }
           } catch (error) {
@@ -663,7 +675,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const formatTimeAgo = (timestamp: number) => {
     const now = Date.now();
     const diff = Math.floor((now - timestamp) / 1000);
-    
+
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -1331,15 +1343,15 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
         showToast(`💥 Selling ${percentage}% (${formatCompact(tokenAmount, 1)} tokens) from wallet ${walletId}...`);
 
-      const result = await buildPumpSellInstructions({
-        mintAddress: currentCoin,
-        tokenAmount: tokenAmount.toString(),
-        walletPublicKey: wallet.publicKey,
-        walletId: walletId,
-        slippage: parseFloat(slippage) || 5,
-        protocol: protocolType || 'v1',
-        pairAddress: pairInfo?.pairAddress
-      });
+        const result = await buildPumpSellInstructions({
+          mintAddress: currentCoin,
+          tokenAmount: tokenAmount.toString(),
+          walletPublicKey: wallet.publicKey,
+          walletId: walletId,
+          slippage: parseFloat(slippage) || 5,
+          protocol: protocolType || 'v1',
+          pairAddress: pairInfo?.pairAddress
+        });
 
         if (!result.success) {
           throw new Error(result.error);
@@ -1486,27 +1498,27 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       <div className="border-b border-green-500/30 bg-black/70 backdrop-blur-sm">
         <div className="p-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-             <div className="flex items-center gap-4 min-w-0">
-               <div className="flex items-center gap-1">
-                 {pairInfo?.tokenImage && (
-                   <img
-                     src={pairInfo.tokenImage}
-                     alt={pairInfo.tokenName || pairInfo.tokenTicker}
-                     className="w-12 h-12 rounded-lg border-2 border-green-500/40 object-cover flex-shrink-0 shadow-lg"
-                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                   />
-                 )}
-               </div>
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="flex items-center gap-1">
+                {pairInfo?.tokenImage && (
+                  <img
+                    src={pairInfo.tokenImage}
+                    alt={pairInfo.tokenName || pairInfo.tokenTicker}
+                    className="w-12 h-12 rounded-lg border-2 border-green-500/40 object-cover flex-shrink-0 shadow-lg"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
+              </div>
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 min-w-0">
                   <div className="text-green-100 font-bold text-lg font-mono truncate">
                     {pairInfo
                       ? pairInfo.tokenName
                         ? `${pairInfo.tokenName} (${pairInfo.tokenTicker})`
-                         : pairInfo.tokenTicker || (currentCoin === 'So11111111111111111111111111111112' ? 'SOL' : `${currentCoin.slice(0, 6)}...${currentCoin.slice(-6)}`)
-                       : currentCoin === 'So11111111111111111111111111111112'
-                         ? 'SOL /USD'
-                         : `${currentCoin.slice(0, 6)}...${currentCoin.slice(-6)}`}
+                        : pairInfo.tokenTicker || (currentCoin === 'So11111111111111111111111111111112' ? 'SOL' : `${currentCoin.slice(0, 6)}...${currentCoin.slice(-6)}`)
+                      : currentCoin === 'So11111111111111111111111111111112'
+                        ? 'SOL /USD'
+                        : `${currentCoin.slice(0, 6)}...${currentCoin.slice(-6)}`}
                   </div>
                   <div className="px-3 py-1 rounded border border-green-500/40 bg-green-500/10 text-green-100 text-sm font-mono whitespace-nowrap">
                     {pairInfoLoading ? '...' : currentMarketCapUsd ? `$${formatCompact(currentMarketCapUsd, 2)}` : '$—'}
@@ -1567,14 +1579,14 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   <span className={tokenInfo.dexPaid ? 'text-green-100 font-semibold' : 'text-red-300 font-semibold'}>
                     {tokenInfo.dexPaid ? '✓' : '✗'}
                   </span>
-                       </span>
-                    </div>
+                </span>
+              </div>
             )}
           </div>
         </div>
       </div>
 
-       {/* Main Content */}
+      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden min-h-0" data-terminal-container>
         {/* Left Panel */}
         <div className="flex-1 flex flex-col min-h-0">
@@ -1615,59 +1627,95 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                     <button
                       key={tab.id}
                       onClick={() => handleTabClick(tab.id)}
-                      className={`px-4 py-2 text-xs font-mono font-semibold border-r border-green-500/20 transition-all duration-200 relative ${
-                        activeTab === tab.id
-                          ? 'bg-green-500/15 text-green-300 border-b-2 border-green-400 shadow-inner'
-                          : 'text-green-400/70 hover:text-green-300 hover:bg-green-500/5'
-                      }`}
+                      className={`px-4 py-2 text-xs font-mono font-semibold border-r border-green-500/20 transition-all duration-200 relative ${activeTab === tab.id
+                        ? 'bg-green-500/15 text-green-300 border-b-2 border-green-400 shadow-inner'
+                        : 'text-green-400/70 hover:text-green-300 hover:bg-green-500/5'
+                        }`}
                     >
-    <span className="opacity-60 mr-1">[</span>
-    {getTabLabel(tab.id)}
-    <span className="opacity-60 ml-1">]</span>
+                      <span className="opacity-60 mr-1">[</span>
+                      {getTabLabel(tab.id)}
+                      <span className="opacity-60 ml-1">]</span>
                       {activeTab === tab.id && (
                         <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-2 h-0.5 bg-green-400"></div>
                       )}
                     </button>
                   ))}
                 </div>
-                 {activeTab === 'trades' && (
-                   <div className="px-4">
-                     <span className={`text-xs font-mono ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
-                       {isConnected ? '● LIVE' : '● OFFLINE'}
-                     </span>
-                   </div>
-                 )}
-                 {activeTab === 'wallets' && (
-                   <div className="px-4">
-                      {walletConnectionStatus === 'connected' && connectedWallets.length > 0 && (
-                        <span className="ml-4 text-xs font-mono text-green-300/80">
-                          {(() => {
-                            const totalWallets = connectedWallets.length;
-                            const selectedCount = selectedWallets.length;
-                            const totalSol = connectedWallets.reduce((sum, wallet) => sum + (wallet.solBalance || 0), 0);
-                            const totalSpl = connectedWallets.reduce((sum, wallet) => sum + (wallet.splBalance || 0), 0);
+                {activeTab === 'trades' && (
+                  <div className="px-4">
+                    <span className={`text-xs font-mono ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
+                      {isConnected ? '● LIVE' : '● OFFLINE'}
+                    </span>
+                  </div>
+                )}
+                {activeTab === 'wallets' && (
+                  <div className="px-4">
+                    {walletConnectionStatus === 'connected' && connectedWallets.length > 0 && (
+                      <span className="ml-4 inline-flex items-center gap-1.5 text-xs font-mono text-green-300/80 whitespace-nowrap">
+                        {(() => {
+                          const totalWallets = connectedWallets.length;
+                          const selectedCount = selectedWallets.length;
+                          const totalSol = connectedWallets.reduce((sum, wallet) => sum + (wallet.solBalance || 0), 0);
+                          const totalSpl = connectedWallets.reduce((sum, wallet) => sum + (wallet.splBalance || 0), 0);
 
-                            return `${totalWallets} wallet${totalWallets !== 1 ? 's' : ''}${selectedCount > 0 ? ` (${selectedCount} selected)` : ''} | ${totalSol.toFixed(2)} SOL | ${totalSpl > 0 ? formatCompact(totalSpl, 1) : '0'} SPL`;
-                          })()}
-                        </span>
-                      )}
-                       <span className={`ml-2 text-xs font-mono ${
-                         walletConnectionStatus === 'connected' && connectedWallets.length > 0 ? 'text-green-400' :
-                         walletConnectionStatus === 'connecting' ? 'text-yellow-400' :
-                         'text-red-400'
-                       }`}>
-                        ● {
-                          walletConnectionStatus === 'connected' && connectedWallets.length > 0 ? 'UNLOCKED' :
+                          return (
+                            <>
+                              <span>
+                                {totalWallets} wallet{totalWallets !== 1 ? 's' : ''}
+                                <span className="text-green-500/60">{' ('}</span>
+                                {selectedCount > 0 ? (
+                                  <>
+                                    <span className="text-green-300">{selectedCount} selected</span>
+                                    <span className="mx-1 text-green-500/40">/</span>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setSelectedWallets([]); }}
+                                      className="text-red-400 hover:text-red-300 underline hover:no-underline cursor-pointer"
+                                    >
+                                      Deselect
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="text-green-500/60">0 selected</span>
+                                )}
+
+                                {selectedCount < totalWallets && (
+                                  <>
+                                    <span className="mx-1 text-green-500/40">/</span>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setSelectedWallets(connectedWallets.map(w => w?.id).filter(Boolean)); }}
+                                      className="text-green-400 hover:text-green-300 underline hover:no-underline cursor-pointer"
+                                    >
+                                      All
+                                    </button>
+                                  </>
+                                )}
+                                <span className="text-green-500/60">{')'}</span>
+                              </span>
+                              <span className="text-green-500/40">|</span>
+                              <span>{totalSol.toFixed(2)} SOL</span>
+                              <span className="text-green-500/40">|</span>
+                              <span>{totalSpl > 0 ? formatCompact(totalSpl, 1) : '0'} SPL</span>
+                            </>
+                          );
+                        })()}
+                      </span>
+                    )}
+                    <span className={`ml-2 text-xs font-mono ${walletConnectionStatus === 'connected' && connectedWallets.length > 0 ? 'text-green-400' :
+                      walletConnectionStatus === 'connecting' ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                      ● {
+                        walletConnectionStatus === 'connected' && connectedWallets.length > 0 ? 'UNLOCKED' :
                           walletConnectionStatus === 'connected' && connectedWallets.length === 0 ? 'LOCKED' :
-                          walletConnectionStatus === 'connecting' ? 'CONNECTING' :
-                          'DISCONNECTED'
-                        }
-                       </span>
-                    </div>
-                 )}
+                            walletConnectionStatus === 'connecting' ? 'CONNECTING' :
+                              'DISCONNECTED'
+                      }
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
-            
+
             {/* Tab Content */}
             <div className="flex-1 p-2 bg-black/30 min-h-0 overflow-hidden flex flex-col max-h-[60vh]">
               {activeTab === 'trades' ? (
@@ -1685,8 +1733,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                       </div>
                     </div>
                   ) : (
-                     <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[45vh] p-0">
-                       <table className="w-full text-xs font-mono">
+                    <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[45vh] p-0">
+                      <table className="w-full text-xs font-mono">
                         <thead className="bg-black/95 text-green-300 sticky top-0 z-10 backdrop-blur-sm">
                           <tr className="text-left border-b border-green-500/30">
                             <th className="px-3 py-2 cursor-pointer hover:text-green-200" onClick={toggleTimeFormat}>
@@ -1702,16 +1750,15 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                         </thead>
                         <tbody className="divide-y divide-green-500/20">
                           {recentTrades.map((trade, index) => (
-                            <tr 
-                              key={`${trade.txId}-${index}`} 
-                              className={`${
-                                trade.type === 'buy' 
-                                  ? 'bg-green-500/5 hover:bg-green-500/10' 
-                                  : 'bg-red-500/5 hover:bg-red-500/10'
-                              } transition-colors`}
+                            <tr
+                              key={`${trade.txId}-${index}`}
+                              className={`${trade.type === 'buy'
+                                ? 'bg-green-500/5 hover:bg-green-500/10'
+                                : 'bg-red-500/5 hover:bg-red-500/10'
+                                } transition-colors`}
                             >
                               <td className="px-3 py-2 whitespace-nowrap text-gray-400">
-                                {timeFormat === 'absolute' 
+                                {timeFormat === 'absolute'
                                   ? new Date(trade.timestamp).toLocaleTimeString()
                                   : formatTimeAgo(trade.timestamp)
                                 }
@@ -1726,7 +1773,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                   const pricePerTokenUsd =
                                     trade.usdPricePerToken ??
                                     (marketData?.solPrice ? trade.spotPriceSol * marketData.solPrice : null);
-                                   const totalSupply = 1_000_000_000; // Default supply for calculations
+                                  const totalSupply = 1_000_000_000; // Default supply for calculations
                                   const mcUsd =
                                     pricePerTokenUsd != null && totalSupply != null
                                       ? pricePerTokenUsd * totalSupply
@@ -1734,411 +1781,407 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                   return mcUsd != null ? `$${formatCompact(mcUsd, 2)}` : '—';
                                 })()}
                               </td>
-                              <td className={`px-3 py-2 whitespace-nowrap font-semibold ${
-                                trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
-                              }`}>
+                              <td className={`px-3 py-2 whitespace-nowrap font-semibold ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
+                                }`}>
                                 {formatCompact(trade.tokenAmount, 2)}
                               </td>
-                              <td className={`px-3 py-2 whitespace-nowrap font-medium ${
-                                trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
-                              }`}>
+                              <td className={`px-3 py-2 whitespace-nowrap font-medium ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
+                                }`}>
                                 {`${trade.solAmount.toFixed(4)} / $${trade.usdAmount.toFixed(2)}`}
                               </td>
-                               <td className="px-3 py-2 whitespace-nowrap">
-                                 <div className="flex items-center gap-2">
-                                   <span
-                                     className="text-gray-200 hover:text-white cursor-pointer transition-colors"
-                                     onClick={() => {
-                                       navigator.clipboard.writeText(trade.wallet);
-                                       showToast('Wallet address copied to clipboard!');
-                                     }}
-                                     title="Click to copy full address"
-                                   >
-                                     {trade.wallet.slice(0, 6)}...{trade.wallet.slice(-4)}
-                                   </span>
-                                   <a
-                                     href={`https://solscan.io/account/${trade.wallet}`}
-                                     target="_blank"
-                                     rel="noopener noreferrer"
-                                     className="text-gray-400 hover:text-green-400 transition-colors"
-                                     title="View on Solscan"
-                                   >
-                                     <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                       <g clipPath="url(#clip0_trades)">
-                                         <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor"/>
-                                         <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3"/>
-                                       </g>
-                                       <defs>
-                                         <clipPath id="clip0_trades">
-                                           <rect width="316" height="315" fill="white"/>
-                                         </clipPath>
-                                       </defs>
-                                     </svg>
-                                   </a>
-                                 </div>
-                               </td>
-                                <td className="px-3 py-2 whitespace-nowrap">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="text-gray-200 hover:text-white cursor-pointer transition-colors"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(trade.txId);
-                                        showToast('Transaction ID copied to clipboard!');
-                                      }}
-                                      title="Click to copy full transaction ID"
-                                    >
-                                      {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
-                                    </span>
-                                    <a
-                                      href={`https://solscan.io/tx/${trade.txId}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-gray-400 hover:text-green-400 transition-colors"
-                                      title="View transaction on Solscan"
-                                    >
-                                      <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <g clipPath="url(#clip0_tx)">
-                                          <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor"/>
-                                          <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3"/>
-                                        </g>
-                                        <defs>
-                                          <clipPath id="clip0_tx">
-                                            <rect width="316" height="315" fill="white"/>
-                                          </clipPath>
-                                        </defs>
-                                      </svg>
-                                    </a>
-                                  </div>
-                                </td>
-                             </tr>
-                           ))}
-                           </tbody>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="text-gray-200 hover:text-white cursor-pointer transition-colors"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(trade.wallet);
+                                      showToast('Wallet address copied to clipboard!');
+                                    }}
+                                    title="Click to copy full address"
+                                  >
+                                    {trade.wallet.slice(0, 6)}...{trade.wallet.slice(-4)}
+                                  </span>
+                                  <a
+                                    href={`https://solscan.io/account/${trade.wallet}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-gray-400 hover:text-green-400 transition-colors"
+                                    title="View on Solscan"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <g clipPath="url(#clip0_trades)">
+                                        <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor" />
+                                        <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3" />
+                                      </g>
+                                      <defs>
+                                        <clipPath id="clip0_trades">
+                                          <rect width="316" height="315" fill="white" />
+                                        </clipPath>
+                                      </defs>
+                                    </svg>
+                                  </a>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="text-gray-200 hover:text-white cursor-pointer transition-colors"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(trade.txId);
+                                      showToast('Transaction ID copied to clipboard!');
+                                    }}
+                                    title="Click to copy full transaction ID"
+                                  >
+                                    {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
+                                  </span>
+                                  <a
+                                    href={`https://solscan.io/tx/${trade.txId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-gray-400 hover:text-green-400 transition-colors"
+                                    title="View transaction on Solscan"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <g clipPath="url(#clip0_tx)">
+                                        <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor" />
+                                        <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3" />
+                                      </g>
+                                      <defs>
+                                        <clipPath id="clip0_tx">
+                                          <rect width="316" height="315" fill="white" />
+                                        </clipPath>
+                                      </defs>
+                                    </svg>
+                                  </a>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
                       </table>
                     </div>
                   )}
                 </div>
-               ) : activeTab === 'holders-bubble' ? (
-                 <div className="flex-1 flex flex-col min-h-0">
-                   <div className="flex-1 flex gap-4 min-h-0">
-                     {/* Holders Section */}
-                     <div className="flex-1 border border-green-500/20 rounded overflow-hidden flex flex-col">
-                       <div className="px-4 py-2 border-b border-green-500/20 bg-green-500/5 flex-shrink-0">
-                         <h3 className="text-green-300 font-mono font-semibold text-sm">
-                           HOLDERS {tokenInfo ? `(${tokenInfo.numHolders || 0})` : ''}
-                         </h3>
-                       </div>
-                       <div className="flex-1 overflow-y-auto max-h-[40vh] p-0">
-                         {holdersLoading ? (
-                           <div className="p-4 text-center text-green-500/60">
-                             <div className="text-green-500/40 font-mono text-sm">
-                               Loading holders...
-                             </div>
-                           </div>
-                          ) : holders.length === 0 ? (
-                            <div className="p-4 text-center text-green-500/60">
-                              <div className="text-green-500/40 font-mono text-sm">
-                                {currentCoin === 'So11111111111111111111111111111112' ? 'Holder data not available for SOL' : 'No holder data available'}
-                              </div>
+              ) : activeTab === 'holders-bubble' ? (
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 flex gap-4 min-h-0">
+                    {/* Holders Section */}
+                    <div className="flex-1 border border-green-500/20 rounded overflow-hidden flex flex-col">
+                      <div className="px-4 py-2 border-b border-green-500/20 bg-green-500/5 flex-shrink-0">
+                        <h3 className="text-green-300 font-mono font-semibold text-sm">
+                          HOLDERS {tokenInfo ? `(${tokenInfo.numHolders || 0})` : ''}
+                        </h3>
+                      </div>
+                      <div className="flex-1 overflow-y-auto max-h-[40vh] p-0">
+                        {holdersLoading ? (
+                          <div className="p-4 text-center text-green-500/60">
+                            <div className="text-green-500/40 font-mono text-sm">
+                              Loading holders...
                             </div>
+                          </div>
+                        ) : holders.length === 0 ? (
+                          <div className="p-4 text-center text-green-500/60">
+                            <div className="text-green-500/40 font-mono text-sm">
+                              {currentCoin === 'So11111111111111111111111111111112' ? 'Holder data not available for SOL' : 'No holder data available'}
+                            </div>
+                          </div>
                         ) : (
                           <table className="w-full text-xs font-mono">
-                             <thead className="bg-green-500/10 sticky top-0 z-10">
-                               <tr className="text-left border-b border-green-500/20">
-                                 <th className="px-3 py-2">Wallet</th>
-                                 <th className="px-3 py-2">Tokens</th>
-                                 <th className="px-3 py-2">SOL</th>
-                                 <th className="px-3 py-2">% of Supply</th>
-                               </tr>
-                             </thead>
-                             <tbody className="divide-y divide-green-500/10">
-                               {holders.slice(0, 20).map((holder, index) => {
-                                  const totalSupply = 1_000_000_000; // Default supply for calculations
-                                 const percentage = ((holder.tokenBalance / totalSupply) * 100).toFixed(2);
-                                 return (
-                                   <tr key={holder.walletAddress} className="hover:bg-green-500/5">
-                                     <td className="px-3 py-2 whitespace-nowrap text-green-300/70 font-mono">
-                                       <span className="inline-flex items-center">
-                                         {holder.walletAddress.slice(0, 6)}...{holder.walletAddress.slice(-4)}
-                                         {holder.isInsider && <span className="ml-1 text-yellow-400 inline-block">{CustomIcons.insider}</span>}
-                                         {holder.isBundler && <span className="ml-1 text-red-400 inline-block">{CustomIcons.bundler}</span>}
-                                       </span>
-                                     </td>
-                                     <td className="px-3 py-2 whitespace-nowrap text-green-400 font-semibold">
-                                       {formatCompact(holder.tokenBalance, 1)}
-                                     </td>
-                                     <td className="px-3 py-2 whitespace-nowrap text-green-300">
-                                       {holder.solBalance.toFixed(3)}
-                                     </td>
-                                     <td className="px-3 py-2 whitespace-nowrap text-green-300/80">
-                                       {percentage}%
-                                     </td>
-                                   </tr>
-                                 );
-                               })}
-                             </tbody>
-                           </table>
-                         )}
-                       </div>
-                     </div>
-
-                     {/* Bubble Map Section */}
-                     <div className="flex-1 border border-green-500/20 rounded overflow-hidden bg-black/50">
-                       <iframe
-                         src={`https://iframe.bubblemaps.io/map?address=${currentCoin}&chain=solana&partnerId=demo`}
-                         className="w-full h-full"
-                         style={{ border: 'none' }}
-                         title="Bubble Map"
-                         allowFullScreen
-                       />
-                     </div>
-                   </div>
-                 </div>
-               ) : activeTab === 'top-trader' ? (
-                 <div className="flex-1 flex flex-col min-h-0">
-                   {tradersLoading ? (
-                     <div className="text-center text-green-500/60 py-8">
-                       <div className="text-green-500/40 font-mono text-sm">
-                         Loading top traders...
-                       </div>
-                     </div>
-                   ) : traders.length === 0 ? (
-                     <div className="text-center text-green-500/60 py-8">
-                       <div className="text-green-500/40 font-mono text-sm">
-                         {currentCoin === 'So11111111111111111111111111111112' ? 'Top traders not available for SOL' : 'No trader data available'}
-                       </div>
-                     </div>
-                   ) : (
-                     <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[50vh] p-0">
-                       <table className="w-full text-xs font-mono">
-                         <thead className="bg-green-500/10 sticky top-0 z-10">
-                           <tr className="text-left border-b border-green-500/20">
-                             <th className="px-3 py-2">Wallet</th>
-                             <th className="px-3 py-2">Buys</th>
-                             <th className="px-3 py-2">Sells</th>
-                             <th className="px-3 py-2">Tokens Bought</th>
-                             <th className="px-3 py-2">Tokens Sold</th>
-                             <th className="px-3 py-2">SOL Invested</th>
-                             <th className="px-3 py-2">SOL Sold</th>
-                             <th className="px-3 py-2">PnL (USD)</th>
-                           </tr>
-                         </thead>
-                         <tbody className="divide-y divide-green-500/10">
-                           {traders.slice(0, 20).map((trader, index) => {
-                             const pnl = trader.usdSold - trader.usdInvested;
-                             return (
-                               <tr key={trader.walletAddress} className="hover:bg-green-500/5">
-                                 <td className="px-3 py-2 whitespace-nowrap text-green-300/70 font-mono">
-                                   <span className="inline-flex items-center">
-                                     {trader.walletAddress.slice(0, 6)}...{trader.walletAddress.slice(-4)}
-                                     {trader.isInsider && <span className="ml-1 text-yellow-400 inline-block">{CustomIcons.insider}</span>}
-                                     {trader.isBundler && <span className="ml-1 text-red-400 inline-block">{CustomIcons.bundler}</span>}
-                                     {trader.isSniper && <span className="ml-1 text-red-400 inline-block">{CustomIcons.sniper}</span>}
-                                   </span>
-                                 </td>
-                                 <td className="px-3 py-2 whitespace-nowrap text-green-400 font-semibold">
-                                   {trader.buyTransactions}
-                                 </td>
-                                 <td className="px-3 py-2 whitespace-nowrap text-red-400 font-semibold">
-                                   {trader.sellTransactions}
-                                 </td>
-                                 <td className="px-3 py-2 whitespace-nowrap text-green-300">
-                                   {formatCompact(trader.tokensBought, 1)}
-                                 </td>
-                                 <td className="px-3 py-2 whitespace-nowrap text-red-300">
-                                   {formatCompact(trader.tokensSold, 1)}
-                                 </td>
-                                 <td className="px-3 py-2 whitespace-nowrap text-green-300">
-                                   {trader.solInvested.toFixed(2)} ◎
-                                 </td>
-                                 <td className="px-3 py-2 whitespace-nowrap text-red-300">
-                                   {trader.solSold.toFixed(2)} ◎
-                                 </td>
-                                 <td className={`px-3 py-2 whitespace-nowrap font-semibold ${
-                                   pnl >= 0 ? 'text-green-400' : 'text-red-400'
-                                 }`}>
-                                   {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
-                                 </td>
-                               </tr>
-                             );
-                           })}
-                         </tbody>
-                       </table>
-                     </div>
-                   )}
-                 </div>
-                 ) : activeTab === 'wallets' ? (
-                   <div className="flex-1 flex flex-col min-h-0 relative">
-                     {/* Login Required Overlay */}
-                     {!operator && (
-                       <div className="absolute inset-0 bg-gray-800/40 backdrop-blur-sm z-20 flex items-center justify-center border border-green-500/30 rounded">
-                         <div className="text-center space-y-4 p-6 max-w-md">
-                           <div className="text-green-400 font-mono text-xl">[ JOIN THE PLATFORM ]</div>
-                           <div className="text-green-300/80 font-mono text-sm space-y-2">
-                             <p>Welcome to the most advanced trading platform.</p>
-                             <p>Sign in with Telegram to access all trading features.</p>
-                           </div>
-                           <a
-                             href="/login"
-                             className="inline-block px-6 py-3 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
-                           >
-                             Sign Up Now
-                           </a>
-                         </div>
-                       </div>
-                     )}
-
-                     {/* Wallets Table */}
-                     <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[60vh] p-0">
-                      {connectedWallets.length === 0 ? (
-                        <div className="text-center text-green-500/60 py-12 space-y-3">
-                          <div className="text-green-300 font-mono text-lg mb-2">[ NO WALLETS ]</div>
-                          <div className="text-green-500/40 font-mono text-sm space-y-2 max-w-md mx-auto">
-                            <p>Connect your wallet client to see your wallets here.</p>
-                            <p>Go to Settings → Wallet Client Connection to get started.</p>
-                          </div>
-                          <a
-                            href="/settings"
-                            className="inline-block px-4 py-2 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
-                          >
-                            Open Settings
-                           </a>
-                         </div>
-                          ) : (
-                             <table className="w-full text-xs font-mono">
-                               <thead className="bg-green-500/10 sticky top-0 z-10 backdrop-blur-sm">
-                                 <tr className="text-left border-b border-green-500/30">
-                                   <th className="px-3 py-2">Name</th>
-                                   <th className="px-3 py-2">Address</th>
-                                   <th className="px-3 py-2">SOL Balance</th>
-                                   <th className="px-3 py-2">SPL Balance</th>
-                                   <th className="px-3 py-2">Actions</th>
-                                 </tr>
-                               </thead>
-                               <tbody className="divide-y divide-green-500/20">
-                             {connectedWallets.map((wallet) => {
-                               const isSelected = selectedWallets.includes(wallet.id);
-                               return (
-                                 <tr
-                                   key={wallet.id}
-                                   onClick={() => {
-                                     setSelectedWallets(prev =>
-                                       isSelected
-                                         ? prev.filter(id => id !== wallet.id)
-                                         : [...prev, wallet.id]
-                                     );
-                                   }}
-                                     className={`cursor-pointer transition-colors ${
-                                       isSelected
-                                         ? 'bg-white/10 border-l-3 border-green-400 shadow-sm hover:bg-white/20'
-                                         : 'hover:bg-white/5'
-                                     }`}
-                                  >
-                                    <td className="px-3 py-2 whitespace-nowrap">
-                                      <div className="flex items-center gap-2">
-                                        <span className={isSelected ? "text-green-300" : "text-green-400"}>
-                                          {isSelected ? "✓" : "🔑"}
-                                        </span>
-                                        <span className={`font-semibold ${isSelected ? "text-white" : "text-green-100"}`}>
-                                          {wallet.name}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-white font-mono">
-                                      <span
-                                        className="cursor-pointer hover:text-green-300 transition-colors select-none"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          navigator.clipboard.writeText(wallet.publicKey);
-                                          showToast('Wallet address copied!');
-                                        }}
-                                        title="Click to copy wallet address"
-                                      >
-                                        {wallet.publicKey.slice(0, 8)}...{wallet.publicKey.slice(-8)}
+                            <thead className="bg-green-500/10 sticky top-0 z-10">
+                              <tr className="text-left border-b border-green-500/20">
+                                <th className="px-3 py-2">Wallet</th>
+                                <th className="px-3 py-2">Tokens</th>
+                                <th className="px-3 py-2">SOL</th>
+                                <th className="px-3 py-2">% of Supply</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-green-500/10">
+                              {holders.slice(0, 20).map((holder, index) => {
+                                const totalSupply = 1_000_000_000; // Default supply for calculations
+                                const percentage = ((holder.tokenBalance / totalSupply) * 100).toFixed(2);
+                                return (
+                                  <tr key={holder.walletAddress} className="hover:bg-green-500/5">
+                                    <td className="px-3 py-2 whitespace-nowrap text-green-300/70 font-mono">
+                                      <span className="inline-flex items-center">
+                                        {holder.walletAddress.slice(0, 6)}...{holder.walletAddress.slice(-4)}
+                                        {holder.isInsider && <span className="ml-1 text-yellow-400 inline-block">{CustomIcons.insider}</span>}
+                                        {holder.isBundler && <span className="ml-1 text-red-400 inline-block">{CustomIcons.bundler}</span>}
                                       </span>
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-green-200 font-medium">
-                                      {wallet.solBalance !== undefined ? `${wallet.solBalance.toFixed(4)} SOL` : '—'}
+                                    <td className="px-3 py-2 whitespace-nowrap text-green-400 font-semibold">
+                                      {formatCompact(holder.tokenBalance, 1)}
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-green-200 font-medium">
-                                      {wallet.splBalance ? `${formatCompact(wallet.splBalance, 1)}` : '—'}
+                                    <td className="px-3 py-2 whitespace-nowrap text-green-300">
+                                      {holder.solBalance.toFixed(3)}
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap">
-                                        <div className="flex gap-1">
-                                          <button
-                                            className="px-2 py-1 text-xs font-mono bg-green-500/20 text-green-100 border border-green-500/40 rounded hover:bg-green-500/30 transition-colors"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
-                                              setTradeMode('buy');
-                                              // Scroll to trading controls
-                                              document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
-                                            }}
-                                            title="Buy tokens with this wallet"
-                                          >
-                                            BUY
-                                          </button>
-                                          <button
-                                            className="px-2 py-1 text-xs font-mono bg-red-500/20 text-red-100 border border-red-500/40 rounded hover:bg-red-500/30 transition-colors"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
-                                              setTradeMode('sell');
-                                              // Scroll to trading controls
-                                              document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
-                                            }}
-                                            title="Sell tokens with this wallet"
-                                          >
-                                            SELL
-                                          </button>
-                                          <button
-                                            className="px-2 py-1 text-xs font-mono bg-red-500/30 text-red-100 border border-red-500/50 rounded hover:bg-red-500/40 transition-colors"
-                                            onClick={async (e) => {
-                                              e.stopPropagation();
+                                    <td className="px-3 py-2 whitespace-nowrap text-green-300/80">
+                                      {percentage}%
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
 
-                                              // Check if wallet has tokens
-                                              if (!wallet.splBalance || wallet.splBalance <= 0) {
-                                                showToast('❌ No tokens to sell in this wallet');
-                                                return;
-                                              }
-
-                                              try {
-                                                showToast(`💥 Quick selling ${formatCompact(wallet.splBalance, 1)} tokens...`);
-
-                                                 const result = await buildPumpSellInstructions({
-                                                   mintAddress: currentCoin,
-                                                   tokenAmount: wallet.splBalance.toString(),
-                                                   walletPublicKey: wallet.publicKey,
-                                                   walletId: wallet.id,
-                                                   slippage: parseFloat(slippage) || 5,
-                                                   protocol: protocolType || 'v1',
-                                                   pairAddress: pairInfo?.pairAddress
-                                                 });
-
-                                                if (!result.success) {
-                                                  showToast(`❌ Quick sell failed: ${result.error}`);
-                                                }
-                                                // Transaction sent to WSS, response handled by WebSocket listener
-
-                                              } catch (error) {
-                                                showToast(`❌ Quick sell failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                                              }
-                                            }}
-                                            disabled={!wallet.splBalance || wallet.splBalance <= 0}
-                                            title="Quick sell 100% - INSTANT"
-                                          >
-                                            ☢︎
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          )}
+                    {/* Bubble Map Section */}
+                    <div className="flex-1 border border-green-500/20 rounded overflow-hidden bg-black/50">
+                      <iframe
+                        src={`https://iframe.bubblemaps.io/map?address=${currentCoin}&chain=solana&partnerId=demo`}
+                        className="w-full h-full"
+                        style={{ border: 'none' }}
+                        title="Bubble Map"
+                        allowFullScreen
+                      />
                     </div>
                   </div>
-                ) : (
+                </div>
+              ) : activeTab === 'top-trader' ? (
+                <div className="flex-1 flex flex-col min-h-0">
+                  {tradersLoading ? (
+                    <div className="text-center text-green-500/60 py-8">
+                      <div className="text-green-500/40 font-mono text-sm">
+                        Loading top traders...
+                      </div>
+                    </div>
+                  ) : traders.length === 0 ? (
+                    <div className="text-center text-green-500/60 py-8">
+                      <div className="text-green-500/40 font-mono text-sm">
+                        {currentCoin === 'So11111111111111111111111111111112' ? 'Top traders not available for SOL' : 'No trader data available'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[50vh] p-0">
+                      <table className="w-full text-xs font-mono">
+                        <thead className="bg-green-500/10 sticky top-0 z-10">
+                          <tr className="text-left border-b border-green-500/20">
+                            <th className="px-3 py-2">Wallet</th>
+                            <th className="px-3 py-2">Buys</th>
+                            <th className="px-3 py-2">Sells</th>
+                            <th className="px-3 py-2">Tokens Bought</th>
+                            <th className="px-3 py-2">Tokens Sold</th>
+                            <th className="px-3 py-2">SOL Invested</th>
+                            <th className="px-3 py-2">SOL Sold</th>
+                            <th className="px-3 py-2">PnL (USD)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-green-500/10">
+                          {traders.slice(0, 20).map((trader, index) => {
+                            const pnl = trader.usdSold - trader.usdInvested;
+                            return (
+                              <tr key={trader.walletAddress} className="hover:bg-green-500/5">
+                                <td className="px-3 py-2 whitespace-nowrap text-green-300/70 font-mono">
+                                  <span className="inline-flex items-center">
+                                    {trader.walletAddress.slice(0, 6)}...{trader.walletAddress.slice(-4)}
+                                    {trader.isInsider && <span className="ml-1 text-yellow-400 inline-block">{CustomIcons.insider}</span>}
+                                    {trader.isBundler && <span className="ml-1 text-red-400 inline-block">{CustomIcons.bundler}</span>}
+                                    {trader.isSniper && <span className="ml-1 text-red-400 inline-block">{CustomIcons.sniper}</span>}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-green-400 font-semibold">
+                                  {trader.buyTransactions}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-red-400 font-semibold">
+                                  {trader.sellTransactions}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-green-300">
+                                  {formatCompact(trader.tokensBought, 1)}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-red-300">
+                                  {formatCompact(trader.tokensSold, 1)}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-green-300">
+                                  {trader.solInvested.toFixed(2)} ◎
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-red-300">
+                                  {trader.solSold.toFixed(2)} ◎
+                                </td>
+                                <td className={`px-3 py-2 whitespace-nowrap font-semibold ${pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                                  }`}>
+                                  {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : activeTab === 'wallets' ? (
+                <div className="flex-1 flex flex-col min-h-0 relative">
+                  {/* Login Required Overlay */}
+                  {!operator && (
+                    <div className="absolute inset-0 bg-gray-800/40 backdrop-blur-sm z-20 flex items-center justify-center border border-green-500/30 rounded">
+                      <div className="text-center space-y-4 p-6 max-w-md">
+                        <div className="text-green-400 font-mono text-xl">[ JOIN THE PLATFORM ]</div>
+                        <div className="text-green-300/80 font-mono text-sm space-y-2">
+                          <p>Welcome to the most advanced trading platform.</p>
+                          <p>Sign in with Telegram to access all trading features.</p>
+                        </div>
+                        <a
+                          href="/login"
+                          className="inline-block px-6 py-3 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
+                        >
+                          Sign Up Now
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Wallets Table */}
+                  <div className="flex-1 overflow-y-auto border border-green-500/20 rounded min-h-0 max-h-[60vh] p-0">
+                    {connectedWallets.length === 0 ? (
+                      <div className="text-center text-green-500/60 py-12 space-y-3">
+                        <div className="text-green-300 font-mono text-lg mb-2">[ NO WALLETS ]</div>
+                        <div className="text-green-500/40 font-mono text-sm space-y-2 max-w-md mx-auto">
+                          <p>Connect your wallet client to see your wallets here.</p>
+                          <p>Go to Settings → Wallet Client Connection to get started.</p>
+                        </div>
+                        <a
+                          href="/settings"
+                          className="inline-block px-4 py-2 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
+                        >
+                          Open Settings
+                        </a>
+                      </div>
+                    ) : (
+                      <table className="w-full text-xs font-mono">
+                        <thead className="bg-green-500/10 sticky top-0 z-10 backdrop-blur-sm">
+                          <tr className="text-left border-b border-green-500/30">
+                            <th className="px-3 py-2">Name</th>
+                            <th className="px-3 py-2">Address</th>
+                            <th className="px-3 py-2">SOL Balance</th>
+                            <th className="px-3 py-2">SPL Balance</th>
+                            <th className="px-3 py-2">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-green-500/20">
+                          {connectedWallets.map((wallet) => {
+                            const isSelected = selectedWallets.includes(wallet.id);
+                            return (
+                              <tr
+                                key={wallet.id}
+                                onClick={() => {
+                                  setSelectedWallets(prev =>
+                                    isSelected
+                                      ? prev.filter(id => id !== wallet.id)
+                                      : [...prev, wallet.id]
+                                  );
+                                }}
+                                className={`cursor-pointer transition-colors ${isSelected
+                                  ? 'bg-white/10 border-l-3 border-green-400 shadow-sm hover:bg-white/20'
+                                  : 'hover:bg-white/5'
+                                  }`}
+                              >
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    <span className={isSelected ? "text-green-300" : "text-green-400"}>
+                                      {isSelected ? "✓" : "🔑"}
+                                    </span>
+                                    <span className={`font-semibold ${isSelected ? "text-white" : "text-green-100"}`}>
+                                      {wallet.name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-white font-mono">
+                                  <span
+                                    className="cursor-pointer hover:text-green-300 transition-colors select-none"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigator.clipboard.writeText(wallet.publicKey);
+                                      showToast('Wallet address copied!');
+                                    }}
+                                    title="Click to copy wallet address"
+                                  >
+                                    {wallet.publicKey.slice(0, 8)}...{wallet.publicKey.slice(-8)}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-green-200 font-medium">
+                                  {wallet.solBalance !== undefined ? `${wallet.solBalance.toFixed(4)} SOL` : '—'}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-green-200 font-medium">
+                                  {wallet.splBalance ? `${formatCompact(wallet.splBalance, 1)}` : '—'}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <div className="flex gap-1">
+                                    <button
+                                      className="px-2 py-1 text-xs font-mono bg-green-500/20 text-green-100 border border-green-500/40 rounded hover:bg-green-500/30 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
+                                        setTradeMode('buy');
+                                        // Scroll to trading controls
+                                        document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
+                                      }}
+                                      title="Buy tokens with this wallet"
+                                    >
+                                      BUY
+                                    </button>
+                                    <button
+                                      className="px-2 py-1 text-xs font-mono bg-red-500/20 text-red-100 border border-red-500/40 rounded hover:bg-red-500/30 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedWallets([wallet.id]); // Set as single selected wallet for trading
+                                        setTradeMode('sell');
+                                        // Scroll to trading controls
+                                        document.querySelector('[data-trading-controls]')?.scrollIntoView({ behavior: 'smooth' });
+                                      }}
+                                      title="Sell tokens with this wallet"
+                                    >
+                                      SELL
+                                    </button>
+                                    <button
+                                      className="px-2 py-1 text-xs font-mono bg-red-500/30 text-red-100 border border-red-500/50 rounded hover:bg-red-500/40 transition-colors"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+
+                                        // Check if wallet has tokens
+                                        if (!wallet.splBalance || wallet.splBalance <= 0) {
+                                          showToast('❌ No tokens to sell in this wallet');
+                                          return;
+                                        }
+
+                                        try {
+                                          showToast(`💥 Quick selling ${formatCompact(wallet.splBalance, 1)} tokens...`);
+
+                                          const result = await buildPumpSellInstructions({
+                                            mintAddress: currentCoin,
+                                            tokenAmount: wallet.splBalance.toString(),
+                                            walletPublicKey: wallet.publicKey,
+                                            walletId: wallet.id,
+                                            slippage: parseFloat(slippage) || 5,
+                                            protocol: protocolType || 'v1',
+                                            pairAddress: pairInfo?.pairAddress
+                                          });
+
+                                          if (!result.success) {
+                                            showToast(`❌ Quick sell failed: ${result.error}`);
+                                          }
+                                          // Transaction sent to WSS, response handled by WebSocket listener
+
+                                        } catch (error) {
+                                          showToast(`❌ Quick sell failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                                        }
+                                      }}
+                                      disabled={!wallet.splBalance || wallet.splBalance <= 0}
+                                      title="Quick sell 100% - INSTANT"
+                                    >
+                                      ☢︎
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              ) : (
                 <div className="text-center text-green-500/60 py-8">
                   <div className="text-green-300 font-mono text-lg mb-2">[ {(activeTab as string).toUpperCase()} ]</div>
                   <div className="text-green-500/40 font-mono text-sm">Content coming soon</div>
@@ -2183,565 +2226,619 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
           )}
 
           <div className="p-4 space-y-4 relative flex-1">
-                {selectedWallets.length > 0 && (
-                  <div className="text-xs text-green-300/80 font-mono mb-2 p-2 bg-green-500/5 rounded border border-green-500/20">
-                    Selected wallets: {selectedWallets.length === 1
-                      ? connectedWallets.find(w => w.id === selectedWallets[0])?.name || 'Unknown Wallet'
-                      : `${selectedWallets.length} wallets selected`
-                    }
+            {selectedWallets.length > 0 && (
+              <div className="text-xs text-green-300/80 font-mono mb-2 p-2 bg-green-500/5 rounded border border-green-500/20">
+                Selected wallets: {selectedWallets.length === 1
+                  ? connectedWallets.find(w => w.id === selectedWallets[0])?.name || 'Unknown Wallet'
+                  : `${selectedWallets.length} wallets selected`
+                }
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-green-200 font-mono font-semibold">Quick Trade</span>
+              <div className="flex gap-2 text-xs font-mono">
+                <button
+                  className={`px-2 py-1 rounded border ${tradeMode === 'buy' ? 'bg-green-500/20 border-green-400 text-green-100' : 'border-green-500/30 text-green-300 hover:bg-green-500/10'}`}
+                  onClick={() => setTradeMode('buy')}
+                >
+                  BUY
+                </button>
+                <button
+                  className={`px-2 py-1 rounded border ${tradeMode === 'sell' ? 'bg-red-500/20 border-red-400 text-red-100' : 'border-green-500/30 text-green-300 hover:bg-red-500/10'}`}
+                  onClick={() => setTradeMode('sell')}
+                >
+                  SELL
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm font-mono text-green-100">
+              {tradeMode === 'buy' ? (
+                <div className="flex flex-col gap-2">
+                  <label className="text-green-300/80">Amount (SOL)</label>
+                  <div className="flex gap-2">
+                    <input
+                      value={tradeSolAmount}
+                      onChange={(e) => setTradeSolAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-24 rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(25)}
+                      >
+                        25%
+                      </button>
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(50)}
+                      >
+                        50%
+                      </button>
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(75)}
+                      >
+                        75%
+                      </button>
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(95)}
+                      >
+                        95%
+                      </button>
+                    </div>
                   </div>
-                )}
-               <div className="flex items-center justify-between">
-                 <span className="text-green-200 font-mono font-semibold">Quick Trade</span>
-                <div className="flex gap-2 text-xs font-mono">
-                  <button
-                    className={`px-2 py-1 rounded border ${tradeMode === 'buy' ? 'bg-green-500/20 border-green-400 text-green-100' : 'border-green-500/30 text-green-300 hover:bg-green-500/10'}`}
-                    onClick={() => setTradeMode('buy')}
-                  >
-                    BUY
-                  </button>
-                  <button
-                    className={`px-2 py-1 rounded border ${tradeMode === 'sell' ? 'bg-red-500/20 border-red-400 text-red-100' : 'border-green-500/30 text-green-300 hover:bg-red-500/10'}`}
-                    onClick={() => setTradeMode('sell')}
-                  >
-                    SELL
-                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <label className="text-green-300/80">Percentage (%)</label>
+                  <div className="flex gap-2">
+                    <input
+                      value={tradePercentage}
+                      onChange={(e) => setTradePercentage(e.target.value)}
+                      placeholder="100"
+                      className="w-24 rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(25)}
+                      >
+                        25%
+                      </button>
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(50)}
+                      >
+                        50%
+                      </button>
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(75)}
+                      >
+                        75%
+                      </button>
+                      <button
+                        className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
+                        onClick={() => handleQuickButton(100)}
+                      >
+                        100%
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Trade Settings */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 relative">
+                    <div
+                      className="text-green-300/80 flex items-center cursor-help"
+                      onMouseEnter={() => setShowSlippageTooltip(true)}
+                      onMouseLeave={() => setShowSlippageTooltip(false)}
+                    >
+                      {CustomIcons.slippage}
+                    </div>
+                    {showSlippageTooltip && (
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-black/90 text-green-100 text-xs rounded border border-green-500/30 whitespace-nowrap z-10">
+                        Slippage Tolerance
+                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-2 border-transparent border-t-green-500/30"></div>
+                      </div>
+                    )}
+                    <select
+                      value={slippage}
+                      onChange={(e) => setSlippage(e.target.value)}
+                      className="rounded border border-green-500/30 bg-black/60 px-2 py-1 text-green-100 focus:outline-none focus:border-green-400 text-xs"
+                    >
+                      <option value="0.5">0.5%</option>
+                      <option value="1">1%</option>
+                      <option value="2">2%</option>
+                      <option value="5">5%</option>
+                      <option value="10">10%</option>
+                      <option value="15">15%</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="useJito"
+                      checked={useJito}
+                      onChange={(e) => setUseJito(e.target.checked)}
+                      className="w-3 h-3 rounded border border-green-500/30 bg-black/60 text-green-400 focus:ring-green-400 focus:ring-2"
+                    />
+                    <label htmlFor="useJito" className="text-green-300/80 text-xs font-mono cursor-pointer">
+                      Jito
+                    </label>
+                  </div>
                 </div>
               </div>
 
-                <div className="space-y-3 text-sm font-mono text-green-100">
+              {/* Trade Summary */}
+              {(tradeMode === 'buy' && tradeSolAmount) || (tradeMode === 'sell' && tradePercentage) ? (
+                <div className="text-xs text-green-300/70">
                   {tradeMode === 'buy' ? (
-                    <div className="flex flex-col gap-2">
-                      <label className="text-green-300/80">Amount (SOL)</label>
-                      <div className="flex gap-2">
-                        <input
-                          value={tradeSolAmount}
-                          onChange={(e) => setTradeSolAmount(e.target.value)}
-                          placeholder="0.00"
-                          className="w-24 rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
-                        />
-                        <div className="flex gap-1">
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(25)}
-                          >
-                            25%
-                          </button>
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(50)}
-                          >
-                            50%
-                          </button>
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(75)}
-                          >
-                            75%
-                          </button>
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(95)}
-                          >
-                            95%
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      <label className="text-green-300/80">Percentage (%)</label>
-                      <div className="flex gap-2">
-                        <input
-                          value={tradePercentage}
-                          onChange={(e) => setTradePercentage(e.target.value)}
-                          placeholder="100"
-                          className="w-24 rounded border border-green-500/30 bg-black/60 px-3 py-2 text-green-100 placeholder:text-green-500/40 focus:outline-none focus:border-green-400"
-                        />
-                        <div className="flex gap-1">
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(25)}
-                          >
-                            25%
-                          </button>
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(50)}
-                          >
-                            50%
-                          </button>
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(75)}
-                          >
-                            75%
-                          </button>
-                          <button
-                            className="px-2 py-1 text-xs rounded border border-green-500/30 bg-green-500/5 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 font-mono text-green-300 hover:text-green-100"
-                            onClick={() => handleQuickButton(100)}
-                          >
-                            100%
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Trade Settings */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 relative">
-                        <div
-                          className="text-green-300/80 flex items-center cursor-help"
-                          onMouseEnter={() => setShowSlippageTooltip(true)}
-                          onMouseLeave={() => setShowSlippageTooltip(false)}
-                        >
-                          {CustomIcons.slippage}
-                        </div>
-                        {showSlippageTooltip && (
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-black/90 text-green-100 text-xs rounded border border-green-500/30 whitespace-nowrap z-10">
-                            Slippage Tolerance
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-2 border-transparent border-t-green-500/30"></div>
-                          </div>
-                        )}
-                        <select
-                          value={slippage}
-                          onChange={(e) => setSlippage(e.target.value)}
-                          className="rounded border border-green-500/30 bg-black/60 px-2 py-1 text-green-100 focus:outline-none focus:border-green-400 text-xs"
-                        >
-                          <option value="0.5">0.5%</option>
-                          <option value="1">1%</option>
-                          <option value="2">2%</option>
-                          <option value="5">5%</option>
-                          <option value="10">10%</option>
-                          <option value="15">15%</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="useJito"
-                          checked={useJito}
-                          onChange={(e) => setUseJito(e.target.checked)}
-                          className="w-3 h-3 rounded border border-green-500/30 bg-black/60 text-green-400 focus:ring-green-400 focus:ring-2"
-                        />
-                        <label htmlFor="useJito" className="text-green-300/80 text-xs font-mono cursor-pointer">
-                          Jito
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Trade Summary */}
-                  {(tradeMode === 'buy' && tradeSolAmount) || (tradeMode === 'sell' && tradePercentage) ? (
-                    <div className="text-xs text-green-300/70">
-                      {tradeMode === 'buy' ? (
-                        <div className="flex items-center gap-1">
-                          <span>Tokens:</span>
-                          <span>~{formatCompact(calculateEstimatedTokens || 0, 2)} {pairInfo?.tokenTicker || 'tokens'}</span>
-                          {recentTrades.length > 0 && (
-                            <span className="text-green-400/60 text-[10px]">● LIVE</span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <span>Receive:</span>
-                          <span>~{calculateEstimatedSolReceive ? calculateEstimatedSolReceive.toFixed(4) : '—'} SOL</span>
-                          <span className="text-green-400/60 text-[10px]">(est. {slippage}% slippage)</span>
-                          {recentTrades.length > 0 && (
-                            <span className="text-green-400/60 text-[10px]">● LIVE</span>
-                          )}
-                        </div>
+                    <div className="flex items-center gap-1">
+                      <span>Tokens:</span>
+                      <span>~{formatCompact(calculateEstimatedTokens || 0, 2)} {pairInfo?.tokenTicker || 'tokens'}</span>
+                      {recentTrades.length > 0 && (
+                        <span className="text-green-400/60 text-[10px]">● LIVE</span>
                       )}
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span>Receive:</span>
+                      <span>~{calculateEstimatedSolReceive ? calculateEstimatedSolReceive.toFixed(4) : '—'} SOL</span>
+                      <span className="text-green-400/60 text-[10px]">(est. {slippage}% slippage)</span>
+                      {recentTrades.length > 0 && (
+                        <span className="text-green-400/60 text-[10px]">● LIVE</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
-                 {/* Validation Error */}
-                 {(() => {
-                   const validation = validateTradeInputs();
-                   if (!validation.valid && (tradeSolAmount || tradePercentage)) {
-                     return (
-                       <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
-                         {validation.error}
-                       </div>
-                     );
-                   }
-                   return null;
-                 })()}
+              {/* Validation Error */}
+              {(() => {
+                const validation = validateTradeInputs();
+                if (!validation.valid && (tradeSolAmount || tradePercentage)) {
+                  return (
+                    <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+                      {validation.error}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
-                 <button
-                   className={`w-full py-2 rounded border font-semibold transition-colors ${
-                     tradeMode === 'buy'
-                       ? 'bg-green-500/20 border-green-400 text-green-100 hover:bg-green-500/30'
-                       : 'bg-red-500/20 border-red-400 text-red-100 hover:bg-red-500/30'
-                   }`}
-                    onClick={async () => {
-                       if (tradeMode === 'buy') {
-                         if (selectedWallets.length === 0) {
-                           showToast('Please select a wallet to trade with.');
-                           return;
-                         }
+              <button
+                className={`w-full py-2 rounded border font-semibold transition-colors ${tradeMode === 'buy'
+                  ? 'bg-green-500/20 border-green-400 text-green-100 hover:bg-green-500/30'
+                  : 'bg-red-500/20 border-red-400 text-red-100 hover:bg-red-500/30'
+                  }`}
+                onClick={async () => {
+                  if (tradeMode === 'buy') {
+                    if (selectedWallets.length === 0) {
+                      showToast('Please select a wallet to trade with.');
+                      return;
+                    }
 
-                         const buyAmount = parseFloat(tradeSolAmount);
-                         if (isNaN(buyAmount) || buyAmount <= 0) {
-                           showToast('Please enter a valid SOL amount.');
-                           return;
-                         }
+                    const buyAmount = parseFloat(tradeSolAmount);
+                    if (isNaN(buyAmount) || buyAmount <= 0) {
+                      showToast('Please enter a valid SOL amount.');
+                      return;
+                    }
 
-                         if (selectedWallets.length === 1) {
-                           // Single wallet buying
-                           const selectedWallet = connectedWallets.find(w => w.id === selectedWallets[0]);
-                           if (!selectedWallet) {
-                             showToast('Selected wallet not found.');
-                             return;
-                           }
-
-                           try {
-                             showToast(`Buying ${formatCompact(calculateEstimatedTokens || 0, 2)} tokens`);
-
-                             const result = await buildPumpBuyInstructions({
-                               mintAddress: currentCoin,
-                               buyAmount: tradeSolAmount,
-                               walletPublicKey: selectedWallet.publicKey,
-                               walletId: selectedWallet.id,
-                               slippage: parseFloat(slippage) || 5,
-                               protocol: protocolType || 'v1',
-                               pairAddress: pairInfo?.pairAddress
-                             });
-
-                             if (!result.success) {
-                               showToast(`❌ ${result.error}`);
-                             }
-
-                           } catch (error) {
-                             console.error('❌ Error building Pump V1 buy instructions:', error);
-                             showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                           }
-                         } else {
-                           // Multi-wallet sequential buying
-                           await processMultiWalletBuy(selectedWallets, buyAmount);
-                         }
-                       } else {
-                         // SELL MODE
-                         if (selectedWallets.length === 0) {
-                           showToast('Please select a wallet to trade with.');
-                           return;
-                         }
-
-                         const percentage = parseFloat(tradePercentage);
-                         if (isNaN(percentage) || percentage <= 0 || percentage > 100) {
-                           showToast('Please enter a valid percentage (1-100).');
-                           return;
-                         }
-
-                         if (selectedWallets.length === 1) {
-                           // Single wallet selling
-                           const selectedWallet = connectedWallets.find(w => w.id === selectedWallets[0]);
-                           if (!selectedWallet) {
-                             showToast('Selected wallet not found.');
-                             return;
-                           }
-
-                           try {
-                             // Calculate token amount to sell based on percentage and wallet balance
-                             const tokenBalance = selectedWallet.splBalance || 0;
-                             const tokenAmountToSell = (tokenBalance * percentage) / 100;
-
-                             if (tokenAmountToSell <= 0) {
-                               showToast('No tokens to sell in selected wallet.');
-                               return;
-                             }
-
-                             // Show selling notification
-                             showToast(`Selling ${formatCompact(tokenAmountToSell, 2)} tokens`);
-
-                             const result = await buildPumpSellInstructions({
-                               mintAddress: currentCoin,
-                               tokenAmount: tokenAmountToSell.toString(),
-                               walletPublicKey: selectedWallet.publicKey,
-                               walletId: selectedWallet.id,
-                               slippage: parseFloat(slippage) || 5,
-                               protocol: protocolType || 'v1',
-                               pairAddress: pairInfo?.pairAddress
-                             });
-
-                             if (!result.success) {
-                               showToast(`❌ ${result.error}`);
-                             }
-
-                           } catch (error) {
-                             console.error('❌ Error building Pump V1 sell instructions:', error);
-                             showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                           }
-                         } else {
-                           // Multi-wallet sequential selling
-                           await processMultiWalletSell(selectedWallets, percentage);
-                         }
+                    if (selectedWallets.length === 1) {
+                      // Single wallet buying
+                      const selectedWallet = connectedWallets.find(w => w.id === selectedWallets[0]);
+                      if (!selectedWallet) {
+                        showToast('Selected wallet not found.');
+                        return;
                       }
-                    }}
-                   disabled={selectedWallets.length === 0 || !validateTradeInputs().valid}
-                 >
-                   {selectedWallets.length === 0
-                     ? 'Select wallet(s) to trade'
-                     : tradeMode === 'buy'
-                       ? `Buy ${tradeSolAmount || '0'} SOL`
-                       : `Sell ${tradePercentage || '0'}%`
-                   }
+
+                      try {
+                        showToast(`Buying ${formatCompact(calculateEstimatedTokens || 0, 2)} tokens`);
+
+                        const result = await buildPumpBuyInstructions({
+                          mintAddress: currentCoin,
+                          buyAmount: tradeSolAmount,
+                          walletPublicKey: selectedWallet.publicKey,
+                          walletId: selectedWallet.id,
+                          slippage: parseFloat(slippage) || 5,
+                          protocol: protocolType || 'v1',
+                          pairAddress: pairInfo?.pairAddress
+                        });
+
+                        if (!result.success) {
+                          showToast(`❌ ${result.error}`);
+                        }
+
+                      } catch (error) {
+                        console.error('❌ Error building Pump V1 buy instructions:', error);
+                        showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      }
+                    } else {
+                      // Multi-wallet sequential buying
+                      await processMultiWalletBuy(selectedWallets, buyAmount);
+                    }
+                  } else {
+                    // SELL MODE
+                    if (selectedWallets.length === 0) {
+                      showToast('Please select a wallet to trade with.');
+                      return;
+                    }
+
+                    const percentage = parseFloat(tradePercentage);
+                    if (isNaN(percentage) || percentage <= 0 || percentage > 100) {
+                      showToast('Please enter a valid percentage (1-100).');
+                      return;
+                    }
+
+                    if (selectedWallets.length === 1) {
+                      // Single wallet selling
+                      const selectedWallet = connectedWallets.find(w => w.id === selectedWallets[0]);
+                      if (!selectedWallet) {
+                        showToast('Selected wallet not found.');
+                        return;
+                      }
+
+                      try {
+                        // Calculate token amount to sell based on percentage and wallet balance
+                        const tokenBalance = selectedWallet.splBalance || 0;
+                        const tokenAmountToSell = (tokenBalance * percentage) / 100;
+
+                        if (tokenAmountToSell <= 0) {
+                          showToast('No tokens to sell in selected wallet.');
+                          return;
+                        }
+
+                        // Show selling notification
+                        showToast(`Selling ${formatCompact(tokenAmountToSell, 2)} tokens`);
+
+                        const result = await buildPumpSellInstructions({
+                          mintAddress: currentCoin,
+                          tokenAmount: tokenAmountToSell.toString(),
+                          walletPublicKey: selectedWallet.publicKey,
+                          walletId: selectedWallet.id,
+                          slippage: parseFloat(slippage) || 5,
+                          protocol: protocolType || 'v1',
+                          pairAddress: pairInfo?.pairAddress
+                        });
+
+                        if (!result.success) {
+                          showToast(`❌ ${result.error}`);
+                        }
+
+                      } catch (error) {
+                        console.error('❌ Error building Pump V1 sell instructions:', error);
+                        showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      }
+                    } else {
+                      // Multi-wallet sequential selling
+                      await processMultiWalletSell(selectedWallets, percentage);
+                    }
+                  }
+                }}
+                disabled={selectedWallets.length === 0 || !validateTradeInputs().valid}
+              >
+                {selectedWallets.length === 0
+                  ? 'Select wallet(s) to trade'
+                  : tradeMode === 'buy'
+                    ? `Buy ${tradeSolAmount || '0'} SOL`
+                    : `Sell ${tradePercentage || '0'}%`
+                }
+              </button>
+
+              {/* Multi-Wallet Progress Widget */}
+              {multiWalletProcessing.active && (
+                <div className="mt-3 p-3 bg-black/40 border border-green-500/30 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-green-100 font-mono text-sm">
+                      Multi-Wallet {tradeMode === 'buy' ? 'Buying' : 'Selling'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setMultiWalletProcessing(prev => ({ ...prev, active: false }));
+                        showToast(`❌ Multi-wallet ${tradeMode === 'buy' ? 'buying' : 'selling'} cancelled`);
+                      }}
+                      className="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded border border-red-500/30 hover:border-red-500/50"
+                    >
+                      ✕ Cancel
+                    </button>
+                  </div>
+
+                  <div className="space-y-1 text-xs font-mono">
+                    <div>Current: {multiWalletProcessing.currentWallet || '—'}</div>
+                    <div>Remaining: {multiWalletProcessing.remainingWallets.length}</div>
+                    <div className="text-green-400">Completed: {multiWalletProcessing.completedWallets.length}</div>
+                    {multiWalletProcessing.failedWallets.length > 0 && (
+                      <div className="text-red-400">Failed: {multiWalletProcessing.failedWallets.length}</div>
+                    )}
+                  </div>
+
+                  <div className="mt-2 h-2 bg-green-500/20 rounded">
+                    <div
+                      className="h-full bg-green-500 rounded transition-all duration-300"
+                      style={{
+                        width: `${multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length > 0 ?
+                          ((multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length) /
+                            (multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length +
+                              multiWalletProcessing.remainingWallets.length + (multiWalletProcessing.currentWallet ? 1 : 0))) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Final Stats */}
+              {finalStats && (
+                <div className="mt-2 p-2 bg-green-500/10 border border-green-500/30 rounded text-xs font-mono text-center">
+                  ✅ Multi-wallet completed successful!
+                </div>
+              )}
+            </div>
+
+            {/* Advanced & Extra Section - Separate Container */}
+            <div className="border border-green-500/20 rounded-lg bg-black/40 p-4 space-y-4 mt-4">
+              <div className="flex justify-center mb-2">
+                <button
+                  className="w-full py-1.5 rounded border-2 border-red-500/50 bg-red-500/10 hover:bg-red-500/20 hover:border-red-400 text-red-300 font-mono font-bold text-sm transition-all duration-200 hover:shadow-lg hover:shadow-red-500/20"
+                  onClick={() => {
+                    if (!wssConnection || wssConnection.readyState !== WebSocket.OPEN) {
+                      showToast('❌ Not connected to server');
+                      return;
+                    }
+
+                    if (selectedWallets.length === 0) {
+                      showToast('❌ No wallets selected');
+                      return;
+                    }
+
+                    if (currentCoin === 'So11111111111111111111111111111112') {
+                      showToast('❌ Cannot nuke SOL token');
+                      return;
+                    }
+
+                    const request = {
+                      type: 'nuke_request',
+                      userId: operator?.userId?.toString() || 'unknown',
+                      requestId: `nuke_${Date.now()}`,
+                      mintAddress: currentCoin,
+                      protocol: protocolType || 'v1', // Default to v1 if unknown
+                      pairAddress: pairInfo?.pairAddress || pairInfo?.poolAddress || null,
+                      slippage: parseFloat(slippage) || 5
+                    };
+
+                    wssConnection.send(JSON.stringify(request));
+                    showToast('☢️ Nuke initiated...');
+                  }}
+                >
+                  ☠︎ NUKE ☢︎
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                  onClick={() => setShowLadderBuyModal(true)}
+                >
+                  <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                      <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <span className="text-green-100 text-xs font-mono font-medium">Ladder Buy</span>
+                </button>
+
+                <button
+                  className="p-3 rounded border border-red-500/30 bg-black/40 hover:bg-red-500/10 hover:border-red-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                  onClick={() => setShowLadderSellModal(true)}
+                >
+                  <div className="text-red-300/80 group-hover:text-red-200 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                      <path d="M21 6H3M21 10H7M21 14H11M21 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M3 12l3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <span className="text-red-100 text-xs font-mono font-medium">Ladder Sell</span>
+                </button>
+
+                <button
+                  className="p-3 rounded border border-amber-500/30 bg-black/40 hover:bg-amber-500/10 hover:border-amber-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                  onClick={() => setShowBundleBuyModal(true)}
+                >
+                  <div className="text-amber-300/80 group-hover:text-amber-200 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
+                      <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2" />
+                      <circle cx="9" cy="9" r="1" fill="currentColor" />
+                      <circle cx="15" cy="9" r="1" fill="currentColor" />
+                      <circle cx="9" cy="15" r="1" fill="currentColor" />
+                      <circle cx="15" cy="15" r="1" fill="currentColor" />
+                    </svg>
+                  </div>
+                  <span className="text-amber-100 text-xs font-mono font-medium">Bundle Buy</span>
+                </button>
+
+                <button
+                  className="p-3 rounded border border-cyan-500/30 bg-black/40 hover:bg-cyan-500/10 hover:border-cyan-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                  onClick={() => setShowGatherSolModal(true)}
+                >
+                  <div className="text-cyan-300/80 group-hover:text-cyan-200 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <span className="text-cyan-100 text-xs font-mono font-medium">Gather SOL</span>
+                </button>
+
+                <button
+                  className="p-3 rounded border border-purple-500/30 bg-black/40 hover:bg-purple-500/10 hover:border-purple-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
+                  onClick={() => setShowDistributeSolModal(true)}
+                >
+                  <div className="text-purple-300/80 group-hover:text-purple-200 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                      <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <span className="text-purple-100 text-xs font-mono font-medium">Distribute SOL</span>
+                </button>
+
+
+
+                <div className="relative group">
+                  <button
+                    disabled
+                    className="w-full p-3 rounded border border-orange-500/10 bg-black/20 text-orange-300/40 cursor-not-allowed flex flex-col items-center gap-1 transition-all duration-200"
+                  >
+                    <div className="text-orange-500/20">
+                      <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <span className="text-orange-100/30 text-xs font-mono font-medium">Warm Up Wallet</span>
                   </button>
-
-                  {/* Multi-Wallet Progress Widget */}
-                  {multiWalletProcessing.active && (
-                    <div className="mt-3 p-3 bg-black/40 border border-green-500/30 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-green-100 font-mono text-sm">
-                          Multi-Wallet {tradeMode === 'buy' ? 'Buying' : 'Selling'}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setMultiWalletProcessing(prev => ({ ...prev, active: false }));
-                            showToast(`❌ Multi-wallet ${tradeMode === 'buy' ? 'buying' : 'selling'} cancelled`);
-                          }}
-                          className="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded border border-red-500/30 hover:border-red-500/50"
-                        >
-                          ✕ Cancel
-                        </button>
-                      </div>
-
-                      <div className="space-y-1 text-xs font-mono">
-                        <div>Current: {multiWalletProcessing.currentWallet || '—'}</div>
-                        <div>Remaining: {multiWalletProcessing.remainingWallets.length}</div>
-                        <div className="text-green-400">Completed: {multiWalletProcessing.completedWallets.length}</div>
-                        {multiWalletProcessing.failedWallets.length > 0 && (
-                          <div className="text-red-400">Failed: {multiWalletProcessing.failedWallets.length}</div>
-                        )}
-                      </div>
-
-                      <div className="mt-2 h-2 bg-green-500/20 rounded">
-                        <div
-                          className="h-full bg-green-500 rounded transition-all duration-300"
-                          style={{
-                            width: `${multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length > 0 ?
-                              ((multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length) /
-                               (multiWalletProcessing.completedWallets.length + multiWalletProcessing.failedWallets.length +
-                                multiWalletProcessing.remainingWallets.length + (multiWalletProcessing.currentWallet ? 1 : 0))) * 100 : 0}%`
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Final Stats */}
-                  {finalStats && (
-                    <div className="mt-2 p-2 bg-green-500/10 border border-green-500/30 rounded text-xs font-mono text-center">
-                      ✅ Multi-wallet completed successful!
-                    </div>
-                  )}
-                 </div>
-
-              {/* Advanced & Extra Section - Separate Container */}
-             <div className="border border-green-500/20 rounded-lg bg-black/40 p-4 space-y-4 mt-4">
-               <div className="flex justify-center mb-2">
-                 <button className="w-full py-1.5 rounded border-2 border-red-500/50 bg-red-500/10 hover:bg-red-500/20 hover:border-red-400 text-red-300 font-mono font-bold text-sm transition-all duration-200 hover:shadow-lg hover:shadow-red-500/20">
-                   ☠︎ NUKE ☢︎
-                 </button>
-               </div>
-                <div className="grid grid-cols-3 gap-2">
-                   <button
-                   className="p-3 rounded border border-green-500/30 bg-black/40 hover:bg-green-500/10 hover:border-green-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
-                   onClick={() => setShowLadderBuyModal(true)}
-                 >
-                     <div className="text-green-300/80 group-hover:text-green-200 transition-colors">
-                       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                         <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                         <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                       </svg>
-                     </div>
-                     <span className="text-green-100 text-xs font-mono font-medium">Ladder Buy</span>
-                 </button>
-
-                    <button
-                      className="p-3 rounded border border-red-500/30 bg-black/40 hover:bg-red-500/10 hover:border-red-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
-                      onClick={() => setShowLadderSellModal(true)}
-                    >
-                      <div className="text-red-300/80 group-hover:text-red-200 transition-colors">
-                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                          <path d="M21 6H3M21 10H7M21 14H11M21 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                          <path d="M3 12l3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <span className="text-red-100 text-xs font-mono font-medium">Ladder Sell</span>
-                    </button>
-
-                     <button
-                       className="p-3 rounded border border-amber-500/30 bg-black/40 hover:bg-amber-500/10 hover:border-amber-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
-                       onClick={() => setShowBundleBuyModal(true)}
-                     >
-                       <div className="text-amber-300/80 group-hover:text-amber-200 transition-colors">
-                         <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                           <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-                           <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2"/>
-                           <circle cx="9" cy="9" r="1" fill="currentColor"/>
-                           <circle cx="15" cy="9" r="1" fill="currentColor"/>
-                           <circle cx="9" cy="15" r="1" fill="currentColor"/>
-                           <circle cx="15" cy="15" r="1" fill="currentColor"/>
-                         </svg>
-                       </div>
-                      <span className="text-amber-100 text-xs font-mono font-medium">Bundle Buy</span>
-                    </button>
-
-                    <button
-                      className="p-3 rounded border border-cyan-500/30 bg-black/40 hover:bg-cyan-500/10 hover:border-cyan-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
-                      onClick={() => setShowGatherSolModal(true)}
-                    >
-                      <div className="text-cyan-300/80 group-hover:text-cyan-200 transition-colors">
-                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <span className="text-cyan-100 text-xs font-mono font-medium">Gather SOL</span>
-                    </button>
-
-                    <button
-                      className="p-3 rounded border border-purple-500/30 bg-black/40 hover:bg-purple-500/10 hover:border-purple-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
-                      onClick={() => setShowDistributeSolModal(true)}
-                    >
-                      <div className="text-purple-300/80 group-hover:text-purple-200 transition-colors">
-                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                          <path d="M12 9V3M12 21v-6M9 12H3M21 12h-6M15.5 8.5l4-4M15.5 15.5l4 4M8.5 8.5l-4-4M8.5 15.5l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                        </svg>
-                      </div>
-                      <span className="text-purple-100 text-xs font-mono font-medium">Distribute SOL</span>
-                    </button>
+                  <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-orange-500/20 border border-orange-500/30 rounded-sm text-[10px] text-orange-400 font-bold tracking-wider pointer-events-none">
+                    Coming Soon
+                  </div>
+                </div>
+              </div>
+            </div>
 
 
 
-                    <button
-                      onClick={() => setShowWarmUpWalletModal(true)}
-                      className="p-3 rounded border border-orange-500/30 bg-black/40 hover:bg-orange-500/10 hover:border-orange-400/60 transition-all duration-200 flex flex-col items-center gap-1 group"
-                    >
-                      <div className="text-orange-300/80 group-hover:text-orange-200 transition-colors">
-                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <span className="text-orange-100 text-xs font-mono font-medium">Warm Up Wallet</span>
-                    </button>
-               </div>
-             </div>
+            {/* Ladder Buy Modal */}
+            <LadderBuyModal
+              isOpen={showLadderBuyModal}
+              onClose={() => setShowLadderBuyModal(false)}
+              selectedWallets={selectedWallets}
+              connectedWallets={connectedWallets}
+              onToast={showToast}
+              useJito={useJito}
+              setUseJito={setUseJito}
+              positionIndex={getPositionIndex('ladderBuy')}
+              onMinimize={handleLadderBuyMinimize}
+              onRestore={handleLadderBuyRestore}
+              currentCoin={currentCoin}
+              buildPumpBuyInstructions={buildPumpBuyInstructions}
+              slippage={slippage}
+              protocolType={protocolType}
+              pairInfo={pairInfo}
+            />
 
+            {/* Ladder Sell Modal */}
+            <LadderSellModal
+              isOpen={showLadderSellModal}
+              onClose={() => setShowLadderSellModal(false)}
+              selectedWallets={selectedWallets}
+              connectedWallets={connectedWallets}
+              onToast={showToast}
+              useJito={useJito}
+              setUseJito={setUseJito}
+              positionIndex={getPositionIndex('ladderSell')}
+              onMinimize={handleLadderSellMinimize}
+              onRestore={handleLadderSellRestore}
+              currentCoin={currentCoin}
+              buildPumpSellInstructions={buildPumpSellInstructions}
+              slippage={slippage}
+              protocolType={protocolType}
+              pairInfo={pairInfo}
+            />
 
+            {/* Bundle Buy Modal */}
+            <BundleBuyModal
+              isOpen={showBundleBuyModal}
+              onClose={() => setShowBundleBuyModal(false)}
+              selectedWallets={selectedWallets}
+              connectedWallets={connectedWallets}
+              onToast={showToast}
+              useJito={useJito}
+              setUseJito={setUseJito}
+              positionIndex={getPositionIndex('bundleBuy')}
+              onMinimize={handleBundleBuyMinimize}
+              onRestore={handleBundleBuyRestore}
+              mintAddress={currentCoin}
+              wssConnection={wssConnection}
+              operator={operator}
+              slippage={slippage}
+              protocolType={protocolType}
+              pairAddress={pairInfo?.pairAddress}
+            />
 
-                {/* Ladder Buy Modal */}
-                <LadderBuyModal
-                  isOpen={showLadderBuyModal}
-                  onClose={() => setShowLadderBuyModal(false)}
-                  selectedWallets={selectedWallets}
-                  connectedWallets={connectedWallets}
-                  onToast={showToast}
-                  useJito={useJito}
-                  setUseJito={setUseJito}
-                  positionIndex={getPositionIndex('ladderBuy')}
-                  onMinimize={handleLadderBuyMinimize}
-                  onRestore={handleLadderBuyRestore}
-                />
+            {/* Gather SOL Modal */}
+            <GatherSolModal
+              isOpen={showGatherSolModal}
+              onClose={() => setShowGatherSolModal(false)}
+              selectedWallets={selectedWallets}
+              connectedWallets={connectedWallets}
+              onToast={showToast}
+              positionIndex={getPositionIndex('gatherSol')}
+              onMinimize={handleGatherSolMinimize}
+              onRestore={handleGatherSolRestore}
+              wssConnection={wssConnection}
+              userId={operator?.userId?.toString() || ''}
+            />
 
-                {/* Ladder Sell Modal */}
-                <LadderSellModal
-                  isOpen={showLadderSellModal}
-                  onClose={() => setShowLadderSellModal(false)}
-                  selectedWallets={selectedWallets}
-                  connectedWallets={connectedWallets}
-                  onToast={showToast}
-                  useJito={useJito}
-                  setUseJito={setUseJito}
-                  positionIndex={getPositionIndex('ladderSell')}
-                  onMinimize={handleLadderSellMinimize}
-                  onRestore={handleLadderSellRestore}
-                />
+            {/* Distribute SOL Modal */}
+            <DistributeSolModal
+              isOpen={showDistributeSolModal}
+              onClose={() => setShowDistributeSolModal(false)}
+              selectedWallets={selectedWallets}
+              connectedWallets={connectedWallets}
+              onToast={showToast}
+              positionIndex={getPositionIndex('distributeSol')}
+              onMinimize={handleDistributeSolMinimize}
+              onRestore={handleDistributeSolRestore}
+              wssConnection={wssConnection}
+              userId={operator?.userId?.toString() || ''}
+            />
 
-                {/* Bundle Buy Modal */}
-                <BundleBuyModal
-                  isOpen={showBundleBuyModal}
-                  onClose={() => setShowBundleBuyModal(false)}
-                  selectedWallets={selectedWallets}
-                  connectedWallets={connectedWallets}
-                  onToast={showToast}
-                  useJito={useJito}
-                  setUseJito={setUseJito}
-                  positionIndex={getPositionIndex('bundleBuy')}
-                  onMinimize={handleBundleBuyMinimize}
-                  onRestore={handleBundleBuyRestore}
-                />
+            {/* Warm Up Wallet Modal */}
+            <WarmUpWalletModal
+              isOpen={showWarmUpWalletModal}
+              onClose={() => setShowWarmUpWalletModal(false)}
+              selectedWallets={selectedWallets}
+              connectedWallets={connectedWallets}
+              onToast={showToast}
+              useJito={useJito}
+              setUseJito={setUseJito}
+              positionIndex={getPositionIndex('warmUpWallet')}
+              onMinimize={handleWarmUpWalletMinimize}
+              onRestore={handleWarmUpWalletRestore}
+            />
 
-                {/* Gather SOL Modal */}
-                <GatherSolModal
-                  isOpen={showGatherSolModal}
-                  onClose={() => setShowGatherSolModal(false)}
-                  selectedWallets={selectedWallets}
-                  connectedWallets={connectedWallets}
-                  onToast={showToast}
-                  positionIndex={getPositionIndex('gatherSol')}
-                  onMinimize={handleGatherSolMinimize}
-                  onRestore={handleGatherSolRestore}
-                />
-
-                 {/* Distribute SOL Modal */}
-                 <DistributeSolModal
-                   isOpen={showDistributeSolModal}
-                   onClose={() => setShowDistributeSolModal(false)}
-                   selectedWallets={selectedWallets}
-                   connectedWallets={connectedWallets}
-                   onToast={showToast}
-                   positionIndex={getPositionIndex('distributeSol')}
-                   onMinimize={handleDistributeSolMinimize}
-                   onRestore={handleDistributeSolRestore}
-                 />
-
-                 {/* Warm Up Wallet Modal */}
-                 <WarmUpWalletModal
-                   isOpen={showWarmUpWalletModal}
-                   onClose={() => setShowWarmUpWalletModal(false)}
-                   selectedWallets={selectedWallets}
-                   connectedWallets={connectedWallets}
-                   onToast={showToast}
-                   useJito={useJito}
-                   setUseJito={setUseJito}
-                   positionIndex={getPositionIndex('warmUpWallet')}
-                   onMinimize={handleWarmUpWalletMinimize}
-                   onRestore={handleWarmUpWalletRestore}
-                 />
-
-              {showBetaOverlay && (
-               <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm border border-green-500/30 rounded-lg flex flex-col items-center justify-center p-4 text-center space-y-3">
-                 <div className="text-green-50 font-mono text-base">Early access</div>
-                 <div className="text-green-100/90 text-xs font-mono">Register to unlock trading controls.</div>
-                 <a
-                   href="https://t.me/a_trade_dot_fun_bot"
-                   target="_blank"
-                   rel="noreferrer"
-                   className="px-4 py-2 rounded border border-green-300 bg-green-500/30 text-green-50 text-sm font-mono hover:bg-green-500/40"
-                 >
-                   Join Beta
-                 </a>
-               </div>
-             )}
+            {showBetaOverlay && (
+              <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm border border-green-500/30 rounded-lg flex flex-col items-center justify-center p-4 text-center space-y-3">
+                <div className="text-green-50 font-mono text-base">Early access</div>
+                <div className="text-green-100/90 text-xs font-mono">Register to unlock trading controls.</div>
+                <a
+                  href="https://t.me/a_trade_dot_fun_bot"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 rounded border border-green-300 bg-green-500/30 text-green-50 text-sm font-mono hover:bg-green-500/40"
+                >
+                  Join Beta
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-       {/* Toast Notification */}
-       {toastMessage && (
-         <div className={`fixed bottom-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-500 ease-out ${
-           showLadderBuyModal || showLadderSellModal ? 'left-4' : 'right-4'
-         }`}>
-           <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
-             <div className="flex items-center gap-2">
-               <span className="text-green-200/80">✓</span>
-               <span dangerouslySetInnerHTML={{ __html: toastMessage }} />
-             </div>
-           </div>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed bottom-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-500 ease-out ${showLadderBuyModal || showLadderSellModal ? 'left-4' : 'right-4'
+          }`}>
+          <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <span className="text-green-200/80">✓</span>
+              <span dangerouslySetInnerHTML={{ __html: toastMessage }} />
+            </div>
+          </div>
         </div>
       )}
     </div>

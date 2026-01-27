@@ -3,12 +3,23 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const { Pool } = require('pg');
-const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
-const { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require('@solana/spl-token');
+const { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, Transaction, SystemProgram, sendAndConfirmTransaction } = require('@solana/web3.js');
+const { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, createTransferInstruction, AccountLayout, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction, NATIVE_MINT } = require('@solana/spl-token');
 const { OnlinePumpSdk, PumpSdk, getBuyTokenAmountFromSolAmount } = require('./PumpSDK/index.js');
 const { OnlinePumpAmmSdk, PumpAmmSdk } = require('./PumpSDK/PumpSwap/index.js');
 const BN = require('bn.js');
+const bs58 = require('bs58');
+const axios = require('axios');
 require('dotenv').config({ path: '../../.env.local' });
+
+// Jito Configuration
+const JITO_PROXY_URL = 'https://sendtransaction.apteka.wtf';
+const JITO_ENDPOINTS = [
+  'amsterdam',
+  'mainnet',
+  'frankfurt',
+  'tokyo'
+];
 
 class WalletWSSServer {
   constructor(port = 4128) {
@@ -19,7 +30,15 @@ class WalletWSSServer {
     this.userConnections = new Map();
     this.userTokens = new Map(); // userId -> { mintAddress, programType }
     this.pendingSignRequests = new Map(); // requestId -> { userId, transactionData, timestamp }
+    this.pendingBundleRequests = new Map(); // bundleId -> { userId, bundleData, timestamp }
+    this.pendingSignResolvers = new Map(); // bundleId -> { resolve, reject, timestamp }
     this.httpServer = null; // HTTP/HTTPS server instance
+
+    // Nuke configuration
+    this.JITO_TIP_AMOUNT = 0.0002 * LAMPORTS_PER_SOL; // 0.0011 SOL in lamports
+    this.WALLETS_PER_TRANSACTION = 7;
+    this.TRANSACTIONS_PER_BUNDLE = 5;
+    this.MAX_WALLETS_PER_BUNDLE = this.WALLETS_PER_TRANSACTION * this.TRANSACTIONS_PER_BUNDLE; // 35
 
     // Initialize Solana connection
     this.solanaConnection = new Connection(
@@ -348,8 +367,8 @@ class WalletWSSServer {
 
     // Log connection status
     const status = hasTerminal && hasWallet ? 'FULLY_CONNECTED' :
-                   hasTerminal ? 'TERMINAL_ONLY' :
-                   hasWallet ? 'WALLET_ONLY' : 'DISCONNECTED';
+      hasTerminal ? 'TERMINAL_ONLY' :
+        hasWallet ? 'WALLET_ONLY' : 'DISCONNECTED';
 
     console.log(`👤 User ${client.userId} connection status: ${status}`);
   }
@@ -431,6 +450,26 @@ class WalletWSSServer {
           this.handleSignResponse(client, message);
           break;
 
+        case 'nuke_request':
+          this.handleNukeRequest(client, message);
+          break;
+
+        case 'sign_bundle_response':
+          this.handleSignBundleResponse(client, message);
+          break;
+
+        case 'bundle_buy_request':
+          this.handleBundleBuyRequest(client, message);
+          break;
+
+        case 'gather_sol_request':
+          this.handleGatherSolRequest(client, message);
+          break;
+
+        case 'distribute_sol_request':
+          this.handleDistributeSolRequest(client, message);
+          break;
+
         default:
           console.warn(`Unknown message type from ${client.id}:`, message.type);
       }
@@ -465,7 +504,7 @@ class WalletWSSServer {
       console.log(`🔄 Building Pump ${protocol.toUpperCase()} buy instructions for ${mintAddress}, amount: ${buyAmount} SOL`);
 
       // Convert buy amount to lamports (SOL in smallest unit)
-      const solAmountLamports = Math.floor(parseFloat(buyAmount) * 10**9); // 1 SOL = 10^9 lamports
+      const solAmountLamports = Math.floor(parseFloat(buyAmount) * 10 ** 9); // 1 SOL = 10^9 lamports
       const solAmountBN = new BN(solAmountLamports.toString());
 
       // Create PublicKey objects
@@ -523,7 +562,10 @@ class WalletWSSServer {
         console.log('✅ AMM pool state retrieved');
 
         const { globalConfig, pool, poolBaseAmount, poolQuoteAmount } = swapSolanaState;
-
+        console.log('globalConfig', globalConfig);
+        console.log('pool', pool);
+        console.log('poolBaseAmount', poolBaseAmount);
+        console.log('poolQuoteAmount', poolQuoteAmount);
         console.log('📊 AMM Pool Information:');
         console.log(`- Base Reserve: ${poolBaseAmount.toString()} (raw)`);
         console.log(`- Base Reserve: ${(poolBaseAmount.toNumber() / 1_000_000).toLocaleString()} tokens (6 decimals)`);
@@ -569,87 +611,92 @@ class WalletWSSServer {
         throw new Error('Invalid protocol or missing pairAddress for AMM');
       }
 
-        if (protocol === 'v1') {
-          const { bondingCurveAccountInfo, bondingCurve, associatedUserAccountInfo } = buyState;
+      if (protocol === 'v1') {
+        const { bondingCurveAccountInfo, bondingCurve, associatedUserAccountInfo } = buyState;
+        console.log('Bonding curve account info:', bondingCurveAccountInfo);
+        console.log('Bonding curve:', bondingCurve);
+        console.log('Associated user account info:', associatedUserAccountInfo);
+        console.log('Global:', global);
+        // Step 2: Calculate token amount from SOL amount
+        console.log('🔄 Step 2: Calculating token amount...');
+        tokenAmount = getBuyTokenAmountFromSolAmount({
+          global,
+          feeConfig: null,
+          mintSupply: bondingCurve.tokenTotalSupply,
+          bondingCurve,
+          amount: solAmountBN,
+        });
+        console.log('🧮 Token amount calculation result:', tokenAmount ? tokenAmount.toString() : 'undefined');
+        console.log(`🧮 Calculated token amount: ${tokenAmount} (raw value)`);
 
-          // Step 2: Calculate token amount from SOL amount
-          console.log('🔄 Step 2: Calculating token amount...');
-          tokenAmount = getBuyTokenAmountFromSolAmount({
-            global,
-            feeConfig: null,
-            mintSupply: bondingCurve.tokenTotalSupply,
-            bondingCurve,
-            amount: solAmountBN,
-          });
-          console.log('🧮 Token amount calculation result:', tokenAmount ? tokenAmount.toString() : 'undefined');
-          console.log(`🧮 Calculated token amount: ${tokenAmount} (raw value)`);
+        // Step 3: Build V1 transaction instructions
+        console.log('🔄 Step 3: Building V1 buy instructions...');
+        /*
+        console.log('📋 Parameters:', {
+          global: global ? 'exists' : 'null',
+          bondingCurveAccountInfo: bondingCurveAccountInfo ? 'exists' : 'null',
+          bondingCurve: bondingCurve ? 'exists' : 'null',
+          associatedUserAccountInfo: associatedUserAccountInfo ? 'exists' : 'null',
+          mint: mintPubKey.toBase58(),
+          user: userPubKey.toBase58(),
+          amount: tokenAmount ? tokenAmount.toString() : 'null',
+          solAmount: solAmountBN.toString(),
+          slippage,
+          tokenProgram: tokenProgramId.toBase58()
+        });
+        */
 
-         // Step 3: Build V1 transaction instructions
-         console.log('🔄 Step 3: Building V1 buy instructions...');
-         console.log('📋 Parameters:', {
-           global: global ? 'exists' : 'null',
-           bondingCurveAccountInfo: bondingCurveAccountInfo ? 'exists' : 'null',
-           bondingCurve: bondingCurve ? 'exists' : 'null',
-           associatedUserAccountInfo: associatedUserAccountInfo ? 'exists' : 'null',
-           mint: mintPubKey.toBase58(),
-           user: userPubKey.toBase58(),
-           amount: tokenAmount ? tokenAmount.toString() : 'null',
-           solAmount: solAmountBN.toString(),
-           slippage,
-           tokenProgram: tokenProgramId.toBase58()
-         });
+        instructions = await this.offlinePumpSdk.buyInstructions({
+          global,
+          bondingCurveAccountInfo,
+          bondingCurve,
+          associatedUserAccountInfo,
+          mint: mintPubKey,
+          user: userPubKey,
+          amount: tokenAmount,
+          solAmount: solAmountBN,
+          slippage,
+          tokenProgram: tokenProgramId
+        });
 
-         instructions = await this.offlinePumpSdk.buyInstructions({
-           global,
-           bondingCurveAccountInfo,
-           bondingCurve,
-           associatedUserAccountInfo,
-           mint: mintPubKey,
-           user: userPubKey,
-           amount: tokenAmount,
-           solAmount: solAmountBN,
-           slippage,
-           tokenProgram: tokenProgramId
-         });
+        console.log(`✅ Built ${instructions.length} V1 transaction instructions`);
+        instructionArray = Array.isArray(instructions) ? instructions : [instructions];
+      } else {
+        // For AMM, instructions were already built above
+        console.log(`✅ Using pre-built AMM instructions (${instructionArray.length} instructions)`);
+      }
 
-         console.log(`✅ Built ${instructions.length} V1 transaction instructions`);
-         instructionArray = Array.isArray(instructions) ? instructions : [instructions];
-       } else {
-         // For AMM, instructions were already built above
-         console.log(`✅ Using pre-built AMM instructions (${instructionArray.length} instructions)`);
-       }
-
-       // Step 4: Serialize instructions for transmission
-       const serializedInstructions = instructionArray.map(ix => ({
-         programId: ix.programId.toBase58(),
-         keys: ix.keys.map(key => ({
-           pubkey: key.pubkey.toBase58(),
-           isSigner: key.isSigner,
-           isWritable: key.isWritable
-         })),
-         data: ix.data ? Array.from(ix.data) : []
-       }));
+      // Step 4: Serialize instructions for transmission
+      const serializedInstructions = instructionArray.map(ix => ({
+        programId: ix.programId.toBase58(),
+        keys: ix.keys.map(key => ({
+          pubkey: key.pubkey.toBase58(),
+          isSigner: key.isSigner,
+          isWritable: key.isWritable
+        })),
+        data: ix.data ? Array.from(ix.data) : []
+      }));
 
       console.log('📤 Sending build response to terminal client...');
 
-       // Send success response with instructions to terminal client
-       client.ws.send(JSON.stringify({
-         type: 'build_pump_buy_response',
-         requestId: message.requestId,
-         success: true,
-         data: {
-           instructions: serializedInstructions,
-           tokenAmount: tokenAmount.toString(),
-           solAmount: solAmountLamports.toString(),
-           slippage,
-           protocol,
-           accounts: {
-             mint: mintPubKey.toBase58(),
-             user: userPubKey.toBase58(),
-             ...(protocol === 'amm' ? { pool: pairAddress } : {})
-           }
-         }
-       }));
+      // Send success response with instructions to terminal client
+      client.ws.send(JSON.stringify({
+        type: 'build_pump_buy_response',
+        requestId: message.requestId,
+        success: true,
+        data: {
+          instructions: serializedInstructions,
+          tokenAmount: tokenAmount.toString(),
+          solAmount: solAmountLamports.toString(),
+          slippage,
+          protocol,
+          accounts: {
+            mint: mintPubKey.toBase58(),
+            user: userPubKey.toBase58(),
+            ...(protocol === 'amm' ? { pool: pairAddress } : {})
+          }
+        }
+      }));
 
       // Now send sign request to connected wallet client
       console.log('📝 Sending sign request to wallet client...');
@@ -815,12 +862,12 @@ class WalletWSSServer {
           throw new Error('Failed to fetch Pump global state');
         }
         console.log('✅ Global state fetched');
-          // Get token program from the mint address
-          const mintInfo = await this.solanaConnection.getAccountInfo(mintPubKey);
-          if (!mintInfo) {
-            throw new Error('Failed to fetch mint account info');
-          }
-          tokenProgramId = mintInfo.owner;
+        // Get token program from the mint address
+        const mintInfo = await this.solanaConnection.getAccountInfo(mintPubKey);
+        if (!mintInfo) {
+          throw new Error('Failed to fetch mint account info');
+        }
+        tokenProgramId = mintInfo.owner;
         // Step 1b: Fetch sell state for the specific token and user
         const sellState = await this.onlinePumpSdk.fetchSellState(mintPubKey, userPubKey, tokenProgramId);
         if (!sellState) {
@@ -845,7 +892,7 @@ class WalletWSSServer {
           amount: tokenAmountBN,
         });
 
-        console.log(`💰 SOL Amount calculation result: ${solAmount.div(new BN(10**9)).toString()}.${solAmount.mod(new BN(10**9)).toString().padStart(9, '0')} SOL`);
+        console.log(`💰 SOL Amount calculation result: ${solAmount.div(new BN(10 ** 9)).toString()}.${solAmount.mod(new BN(10 ** 9)).toString().padStart(9, '0')} SOL`);
 
         // Step 2: Build V1 sell transaction instructions
         console.log('🔄 Step 2: Building V1 sell instructions...');
@@ -924,7 +971,7 @@ class WalletWSSServer {
 
         expectedSolReceive = numerator.div(denominator);
 
-        console.log(`💰 Expected SOL receive: ${expectedSolReceive.div(new BN(10**9)).toString()}.${expectedSolReceive.mod(new BN(10**9)).toString().padStart(9, '0')} SOL`);
+        console.log(`💰 Expected SOL receive: ${expectedSolReceive.div(new BN(10 ** 9)).toString()}.${expectedSolReceive.mod(new BN(10 ** 9)).toString().padStart(9, '0')} SOL`);
 
         // Set variables for response (mimicking V1 structure)
         global = globalConfig;
@@ -936,8 +983,8 @@ class WalletWSSServer {
         throw new Error('Invalid protocol or missing pairAddress for AMM');
       }
 
-        // Calculations and logging are handled in the protocol conditional above
-        // No additional processing needed here
+      // Calculations and logging are handled in the protocol conditional above
+      // No additional processing needed here
 
       // Step 4: Serialize instructions for transmission
       const serializedInstructions = instructionArray.map(ix => ({
@@ -952,24 +999,24 @@ class WalletWSSServer {
 
       console.log('📤 Sending sell response to terminal client...');
 
-       // Send success response with instructions to terminal client
-       client.ws.send(JSON.stringify({
-         type: 'build_pump_sell_response',
-         requestId: message.requestId,
-         success: true,
-         data: {
-           instructions: serializedInstructions,
-           tokenAmount: tokenAmountSmallestUnit.toString(),
-           solAmount: protocol === 'amm' ? expectedSolReceive.toString() : solAmount.toString(),
-           slippage,
-           protocol,
-           accounts: {
-             mint: mintPubKey.toBase58(),
-             user: userPubKey.toBase58(),
-             ...(protocol === 'amm' ? { pool: pairAddress } : {})
-           }
-         }
-       }));
+      // Send success response with instructions to terminal client
+      client.ws.send(JSON.stringify({
+        type: 'build_pump_sell_response',
+        requestId: message.requestId,
+        success: true,
+        data: {
+          instructions: serializedInstructions,
+          tokenAmount: tokenAmountSmallestUnit.toString(),
+          solAmount: protocol === 'amm' ? expectedSolReceive.toString() : solAmount.toString(),
+          slippage,
+          protocol,
+          accounts: {
+            mint: mintPubKey.toBase58(),
+            user: userPubKey.toBase58(),
+            ...(protocol === 'amm' ? { pool: pairAddress } : {})
+          }
+        }
+      }));
 
       // Now send sign request to connected wallet client
       console.log('📝 Sending sign request to wallet client...');
@@ -1359,6 +1406,1434 @@ class WalletWSSServer {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
   }
+
+  // ============================================================================
+  // NUKE FEATURE - Gather tokens from multiple wallets
+  // ============================================================================
+
+  async handleNukeRequest(client, message) {
+    console.log(`☢️ Nuke request from ${client.id}:`, message);
+
+    // Verify the client is authenticated and matches the requested user
+    if (!client.authenticated || client.userId !== parseInt(message.userId)) {
+      console.log(`❌ Unauthorized nuke request from ${client.id}`);
+      client.ws.send(JSON.stringify({
+        type: 'nuke_response',
+        requestId: message.requestId,
+        success: false,
+        error: 'Unauthorized'
+      }));
+      return;
+    }
+
+    try {
+      const { currentCoin, mintAddress, protocol, pairAddress, slippage, requestId } = message;
+      const userId = parseInt(message.userId);
+      const mint = mintAddress || currentCoin; // Support both field names
+
+      console.log(`☢️ NUKE Request:`);
+      console.log(`   - Mint: ${mint}`);
+      console.log(`   - Protocol: ${protocol || 'v1'}`);
+      console.log(`   - Pair Address: ${pairAddress || 'N/A'}`);
+      console.log(`   - Slippage: ${slippage || 5}%`);
+
+      // Get user's wallets
+      const userWallets = this.userWallets.get(userId) || [];
+      if (userWallets.length === 0) {
+        throw new Error('No wallets found for user');
+      }
+
+      console.log(`🔍 Checking SPL balances for ${userWallets.length} wallets...`);
+
+      // Get token program ID
+      const mintPubKey = new PublicKey(mint);
+      const mintInfo = await this.solanaConnection.getAccountInfo(mintPubKey);
+      if (!mintInfo) {
+        throw new Error('Failed to fetch mint account info');
+      }
+      const tokenProgramId = mintInfo.owner;
+
+      // Get all associated token addresses
+      const walletPublicKeys = userWallets.map(w => new PublicKey(w.publicKey));
+      const associatedTokenAddresses = walletPublicKeys.map(pubkey =>
+        getAssociatedTokenAddressSync(
+          mintPubKey,
+          pubkey,
+          false,
+          tokenProgramId,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        )
+      );
+
+      // Batch check SPL balances
+      const splBalances = await this.getSPLBalancesBatch(associatedTokenAddresses);
+
+      // Filter wallets with balance > 0
+      const walletsWithBalance = [];
+      for (let i = 0; i < userWallets.length; i++) {
+        if (splBalances[i] > 0) {
+          walletsWithBalance.push({
+            wallet: userWallets[i],
+            splBalance: splBalances[i],
+            ataAddress: associatedTokenAddresses[i].toBase58()
+          });
+          console.log(`✅ Wallet ${userWallets[i].name} has ${(splBalances[i] / 1_000_000).toFixed(2)} SPL tokens`);
+        }
+      }
+
+      if (walletsWithBalance.length === 0) {
+        throw new Error('No wallets have SPL token balance');
+      }
+
+      // Select destination wallet (first wallet with balance)
+      const destinationWallet = walletsWithBalance[0];
+      console.log(`📍 Destination wallet: ${destinationWallet.wallet.name}`);
+
+      // Remove destination from senders list
+      const senderWallets = walletsWithBalance.slice(1);
+      if (senderWallets.length === 0) {
+        throw new Error('Only one wallet has tokens, nothing to gather');
+      }
+
+      console.log(`📦 Building gather transactions for ${senderWallets.length} sender wallets...`);
+
+      // Build gather transactions
+      const bundleData = await this.buildGatherTransactions(
+        senderWallets,
+        destinationWallet,
+        mintPubKey,
+        tokenProgramId
+      );
+
+      console.log(`✅ Built ${bundleData.transactions.length} transactions in ${bundleData.bundles.length} bundle(s)`);
+
+      // Add protocol data for sell phase
+      bundleData.protocol = protocol || 'v1';
+      bundleData.pairAddress = pairAddress;
+      bundleData.mintAddress = mint;
+      bundleData.slippage = slippage || 5;
+      bundleData.userId = userId;
+
+      // Send to wallet client for signing
+      await this.sendBundleSignRequest(userId, bundleData, requestId);
+
+    } catch (error) {
+      console.error(`❌ Error in nuke request:`, error);
+      client.ws.send(JSON.stringify({
+        type: 'nuke_response',
+        requestId: message.requestId,
+        success: false,
+        error: error.message
+      }));
+    }
+  }
+
+  async handleBundleBuyRequest(client, message) {
+    console.log('📦 Processing Bundle Buy Request...');
+
+    try {
+      const { userId, mintAddress, wallets, slippage = 5, useJito, protocol = 'v1', pairAddress } = message;
+
+      if (!wallets || wallets.length === 0) {
+        throw new Error('No wallets specified for bundle buy');
+      }
+
+      console.log(`   - Protocol: ${protocol}`);
+      console.log(`   - Mint: ${mintAddress}`);
+      console.log(`   - Wallets: ${wallets.length}`);
+      if (protocol === 'amm') console.log(`   - Pair: ${pairAddress}`);
+
+      const mintPubKey = new PublicKey(mintAddress);
+
+      // Fetch initial state
+      const firstWalletId = wallets[0].walletId;
+      const userWallets = this.userWallets.get(parseInt(userId)) || [];
+      const firstWallet = userWallets.find(w => w.id === firstWalletId);
+
+      if (!firstWallet) {
+        throw new Error(`Wallet ${firstWalletId} not found`);
+      }
+
+      const firstWalletPubKey = new PublicKey(firstWallet.publicKey);
+
+      let global, buyState, tokenProgramId;
+      let swapSolanaState, currentPoolBaseAmount, currentPoolQuoteAmount; // For AMM
+      let currentBondingCurve; // For V1
+
+      const { getBuyTokenAmountFromSolAmount } = require('./PumpSDK/index.js');
+      const { Transaction, SystemProgram } = require('@solana/web3.js');
+
+      if (protocol === 'v1' || !protocol) {
+        const mintInfo = await this.solanaConnection.getAccountInfo(mintPubKey);
+        tokenProgramId = mintInfo.owner;
+
+        // Fetch global and curve
+        global = await this.onlinePumpSdk.fetchGlobal();
+        buyState = await this.onlinePumpSdk.fetchBuyState(mintPubKey, firstWalletPubKey);
+
+        currentBondingCurve = {
+          ...buyState.bondingCurve,
+          virtualSolReserves: buyState.bondingCurve.virtualSolReserves.clone(),
+          virtualTokenReserves: buyState.bondingCurve.virtualTokenReserves.clone(),
+          realSolReserves: buyState.bondingCurve.realSolReserves.clone(),
+          realTokenReserves: buyState.bondingCurve.realTokenReserves.clone(),
+        };
+      } else if (protocol === 'amm' && pairAddress) {
+        const poolKey = new PublicKey(pairAddress);
+        swapSolanaState = await this.onlinePumpAmmSdk.swapSolanaState(poolKey, firstWalletPubKey);
+        const { globalConfig, pool, poolBaseAmount, poolQuoteAmount } = swapSolanaState;
+
+        tokenProgramId = pool.tokenProgram;
+        currentPoolBaseAmount = poolBaseAmount.clone();
+        currentPoolQuoteAmount = poolQuoteAmount.clone();
+      } else {
+        throw new Error(`Unsupported protocol or missing pair address: ${protocol}`);
+      }
+
+      const bundleTransactions = [];
+      const { blockhash } = await this.solanaConnection.getLatestBlockhash('confirmed');
+
+      // Iterate through wallets securely
+      for (let i = 0; i < wallets.length; i++) {
+        const entry = wallets[i];
+        const walletData = userWallets.find(w => w.id === entry.walletId);
+        if (!walletData) throw new Error(`Wallet ${entry.walletId} not found`);
+        const walletPubKey = new PublicKey(walletData.publicKey);
+        console.log(`   🔄 Wallet: ${walletData.name} (${walletPubKey.toBase58()})`);
+
+        console.log(`   🔄 Simulating Tx ${i + 1}/${wallets.length} for ${walletData.name}`);
+
+        const solAmountStr = entry.amount.toString();
+        // Convert SOL to lamports (BN)
+        const lamports = Math.floor(parseFloat(solAmountStr) * 1_000_000_000);
+        const solAmountBN = new BN(lamports.toString());
+
+        let tokenAmount, instructions;
+
+        if (protocol === 'v1' || !protocol) {
+          // 1. Calculate EXPECTED tokens using SIMULATED state
+          tokenAmount = getBuyTokenAmountFromSolAmount({
+            global,
+            feeConfig: null,
+            mintSupply: currentBondingCurve.tokenTotalSupply,
+            bondingCurve: currentBondingCurve, // Use simulated state
+            amount: solAmountBN
+          });
+
+          // 2. Build Instructions using SIMULATED state
+          instructions = await this.offlinePumpSdk.buyInstructions({
+            global,
+            bondingCurveAccountInfo: buyState.bondingCurveAccountInfo,
+            bondingCurve: currentBondingCurve, // critical!
+            mint: mintPubKey,
+            user: walletPubKey,
+            amount: tokenAmount,
+            solAmount: solAmountBN,
+            tokenAmount: tokenAmount,
+            slippage: slippage,
+            tokenProgram: tokenProgramId
+          });
+
+          // 3. Update Simulation State manually
+          currentBondingCurve.virtualSolReserves = currentBondingCurve.virtualSolReserves.add(solAmountBN);
+          currentBondingCurve.virtualTokenReserves = currentBondingCurve.virtualTokenReserves.sub(tokenAmount);
+          currentBondingCurve.realSolReserves = currentBondingCurve.realSolReserves.add(solAmountBN);
+          currentBondingCurve.realTokenReserves = currentBondingCurve.realTokenReserves.sub(tokenAmount);
+
+        } else if (protocol === 'amm') {
+          // 1. Calculate EXPECTED tokens using AMM SIMULATED state
+          // Using AMM constant product formula with 0.3% fee
+          const feeNumerator = new BN(997);
+          const feeDenominator = new BN(1000);
+
+          const solAmountWithFee = solAmountBN.mul(feeNumerator).div(feeDenominator);
+          const numerator = currentPoolBaseAmount.mul(solAmountWithFee);
+          const denominator = currentPoolQuoteAmount.add(solAmountWithFee);
+
+          tokenAmount = numerator.div(denominator);
+
+          // 2. Build Instructions
+          // CRITICAL: We MUST provide wallet-specific state for EVERY wallet in the bundle.
+          // Reusing the first wallet's state will fail because of wrong owner/ATA/user public key.
+          const walletSpecificState = {
+            ...swapSolanaState,
+            user: walletPubKey,
+            // Update reserves with current simulated state
+            poolBaseAmount: currentPoolBaseAmount,
+            poolQuoteAmount: currentPoolQuoteAmount,
+            // Re-derive PDAs for THIS wallet
+            userBaseTokenAccount: getAssociatedTokenAddressSync(
+              mintPubKey,
+              walletPubKey,
+              true,
+              swapSolanaState.baseTokenProgram
+            ),
+            userQuoteTokenAccount: getAssociatedTokenAddressSync(
+              NATIVE_MINT,
+              walletPubKey,
+              true,
+              swapSolanaState.quoteTokenProgram
+            ),
+            // Reset account info to null to force SDK to add setup instructions (ATA creation, WSOL wrap)
+            userBaseAccountInfo: null,
+            userQuoteAccountInfo: null
+          };
+
+          instructions = await this.offlinePumpAmmSdk.buyBaseInput(walletSpecificState, tokenAmount, slippage);
+
+          // 3. Update Simulation State
+          currentPoolBaseAmount = currentPoolBaseAmount.sub(tokenAmount);
+          currentPoolQuoteAmount = currentPoolQuoteAmount.add(solAmountBN);
+        }
+
+        const instructionArray = Array.isArray(instructions) ? instructions : [instructions];
+
+        const transaction = new Transaction();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = walletPubKey;
+        transaction.add(...instructionArray);
+
+        // 4. Add Jito Tip to LAST transaction
+        if (i === wallets.length - 1 && useJito) {
+          const jitoTipAccount = new PublicKey('96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5');
+          const tipIx = SystemProgram.transfer({
+            fromPubkey: walletPubKey,
+            toPubkey: jitoTipAccount,
+            lamports: this.JITO_TIP_AMOUNT
+          });
+          transaction.add(tipIx);
+          console.log(`      💡 Added Jito tip to final tx`);
+        }
+
+        // Serialize
+        const serialized = transaction.serialize({
+          requireAllSignatures: false,
+          verifySignatures: false
+        }).toString('base64');
+
+        bundleTransactions.push({
+          serialized,
+          signers: [walletData.id]
+        });
+      }
+
+      // Prepare bundle data structure expected by sendBundleSignRequest
+      const bundleData = {
+        bundles: [bundleTransactions],
+        totalWallets: wallets.length,
+        // Mock destination details to satisfy type checks if accessed, though not used in bundle_buy
+        destinationDetails: {},
+        totalExpectedIncrease: 0
+      };
+
+      console.log(`📤 Forwarding to wallet client for signing (Bundle Buy)...`);
+
+      // Use the standard bundle sign request flow, passing 'bundle_buy' type
+      await this.sendBundleSignRequest(
+        parseInt(userId),
+        bundleData,
+        message.requestId,
+        0, // bundleIndex
+        [], // accumulatedSignedTxs
+        'bundle_buy' // requestType
+      );
+
+    } catch (error) {
+      console.error('❌ Bundle Buy Failed:', error);
+      client.ws.send(JSON.stringify({
+        type: 'error',
+        message: `Bundle buy failed: ${error.message}`
+      }));
+    }
+  }
+
+  /**
+   * Helper to send a sign request and WAIT for the signed transactions
+   */
+  async awaitClientSignature(userId, bundleData, originalRequestId, bundleIndex = 0, requestType = 'nuke') {
+    const bundleId = `bundle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    return new Promise(async (resolve, reject) => {
+      // Set timeout for 60 seconds (user might need time to approve)
+      const timeout = setTimeout(() => {
+        if (this.pendingSignResolvers.has(bundleId)) {
+          console.log(`⏰ Wait for signature timed out (ID: ${bundleId})`);
+          this.pendingSignResolvers.delete(bundleId);
+          this.pendingBundleRequests.delete(bundleId);
+          reject(new Error("Request timed out or cancelled by user"));
+        }
+      }, 60000);
+
+      // Store the resolver
+      this.pendingSignResolvers.set(bundleId, {
+        resolve: (signedTxs) => {
+          clearTimeout(timeout);
+          this.pendingSignResolvers.delete(bundleId);
+          resolve(signedTxs);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          this.pendingSignResolvers.delete(bundleId);
+          reject(error);
+        },
+        timestamp: Date.now()
+      });
+
+      // Prepare metadata for handleSignBundleResponse to find us
+      this.pendingBundleRequests.set(bundleId, {
+        userId,
+        bundleData,
+        originalRequestId,
+        bundleIndex,
+        accumulatedSignedTxs: [],
+        requestType,
+        timestamp: Date.now(),
+        isAwaited: true // Flag to indicate we handle the response here
+      });
+
+      // Execute actual sign request send
+      try {
+        const userConnections = this.userConnections.get(userId);
+        if (!userConnections?.wallet) throw new Error('No wallet client connected');
+        const walletClient = userConnections.wallet;
+        if (!walletClient.ws || walletClient.ws.readyState !== 1) throw new Error('Wallet WebSocket not ready');
+
+        const currentBundle = bundleData.bundles[bundleIndex];
+        const signRequest = {
+          type: 'sign_bundle_request',
+          id: bundleId,
+          timestamp: Date.now(),
+          transactions: currentBundle
+        };
+
+        console.log(`📤 [SYNC] Awaiting signature for ${bundleId} (Type: ${requestType})...`);
+        walletClient.ws.send(JSON.stringify(signRequest));
+
+      } catch (err) {
+        this.pendingSignResolvers.delete(bundleId);
+        this.pendingBundleRequests.delete(bundleId);
+        clearTimeout(timeout);
+        reject(err);
+      }
+    });
+  }
+
+  async handleGatherSolRequest(client, message) {
+    console.log('📦 Processing Gather SOL Request...');
+
+    try {
+      const { userId, wallets, receiver } = message; // wallets is array of strings (Ids), receiver is string (Id)
+
+      if (!wallets || wallets.length === 0) throw new Error('No wallets specified');
+      if (!receiver) throw new Error('No receiver specified');
+
+      console.log(`   - Wallets: ${wallets.length}`);
+      console.log(`   - Receiver: ${receiver}`);
+
+      const userWallets = this.userWallets.get(parseInt(userId)) || [];
+      const receiverWallet = userWallets.find(w => w.id === receiver);
+      if (!receiverWallet) throw new Error('Receiver wallet not found');
+
+      const receiverPubKey = new PublicKey(receiverWallet.publicKey);
+      const { blockhash } = await this.solanaConnection.getLatestBlockhash('confirmed');
+      const { Transaction, SystemProgram } = require('@solana/web3.js');
+
+      // 1. Fetch real-time balances for ALL source wallets
+      // We map wallet IDs to PublicKeys first
+      const sourceWalletsData = wallets.map(id => userWallets.find(w => w.id === id)).filter(Boolean);
+      const sourcePubKeys = sourceWalletsData.map(w => new PublicKey(w.publicKey));
+
+      // Batch fetch (chunk by 100 for getMultipleAccountsInfo limit)
+      const balances = [];
+      const CHUNK_SIZE_RPC = 100;
+      for (let i = 0; i < sourcePubKeys.length; i += CHUNK_SIZE_RPC) {
+        const chunk = sourcePubKeys.slice(i, i + CHUNK_SIZE_RPC);
+        const infos = await this.solanaConnection.getMultipleAccountsInfo(chunk);
+        infos.forEach((info, idx) => {
+          balances.push({
+            wallet: sourceWalletsData[i + idx],
+            lamports: info ? info.lamports : 0
+          });
+        });
+      }
+
+      // Filter empty wallets (dust threshold 0.001 SOL = 1M lamports)
+      const activeWallets = balances.filter(b => b.lamports > 1000000); // Strict filter
+      console.log(`   - Active Wallets (>0.001 SOL): ${activeWallets.length}`);
+
+      if (activeWallets.length === 0) {
+        throw new Error('No wallets have sufficient SOL to gather');
+      }
+
+      // 2. Pack Transactions (7 Transfers per Tx)
+      const PACK_SIZE = 7;
+      const validTransactions = [];
+      const JITO_TIP = this.JITO_TIP_AMOUNT || 100000;
+      // Note: We need to put Jito Tip in the bundle. 
+      // Current Logic: We pack Txs. The 'handleSignBundleResponse' will handle bundling.
+      // BUT 'handleSignBundleResponse' logic usually ADDS tip? No, 'handleSignBundleResponse' sends bundle.
+      // Wait, 'buildGatherTransactions' (Nuke) added the tip INSTRUCTION to the transaction.
+      // If we rely on 'handleSignBundleResponse', it splits signed txs into bundles.
+      // Does it add Tip? No. It assumes tip is present or uses a separate mechanism?
+      // Check `handleSignBundleResponse` => No code adding Tip.
+      // So **WE MUST ADD TIP INSTRUCTION HERE**.
+
+      // We group generated transactions into "Logical Bundles" of 5.
+      // The last transaction of each logical bundle must have a Tip.
+      // Or simply: Every 5th transaction gets a tip?
+      // Actually, if we send 100 transfers => 15 transactions.
+      // Jito Bundles: Tx 1-5 (Tip in Tx 5), Tx 6-10 (Tip in Tx 10), Tx 11-15 (Tip in Tx 15).
+
+      // So we must organize Txs into groups of 5 here.
+
+      const transactions = [];
+
+      // Helper to process a group of wallets into one transaction
+      const createTx = (walletGroup, addTip = false) => {
+        const transaction = new Transaction();
+        transaction.recentBlockhash = blockhash;
+
+        // Pick Fee Payer (First wallet in group)
+        const feePayer = walletGroup[0].wallet;
+        const feePayerPubKey = new PublicKey(feePayer.publicKey);
+        transaction.feePayer = feePayerPubKey;
+
+        const signaturesRequired = walletGroup.length + (addTip ? 0 : 0); // Tip uses transfer from payer
+        const estimatedFee = signaturesRequired * 5000; // 5000 per sig
+        const tipAmount = addTip ? JITO_TIP : 0;
+
+        const signers = [];
+
+        walletGroup.forEach((item, idx) => {
+          const isPayer = idx === 0;
+          const senderPubKey = new PublicKey(item.wallet.publicKey);
+
+          let sendAmount = item.lamports;
+
+          if (isPayer) {
+            // Deduct Tx Fee and Tip
+            sendAmount = item.lamports - estimatedFee - tipAmount;
+          }
+
+          // Check viability
+          if (sendAmount > 0) {
+            transaction.add(SystemProgram.transfer({
+              fromPubkey: senderPubKey,
+              toPubkey: receiverPubKey,
+              lamports: sendAmount
+            }));
+            signers.push(item.wallet.id);
+          }
+        });
+
+        if (addTip && signers.length > 0) { // Only add tip if tx is valid
+          const jitoTipAccount = new PublicKey('96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5');
+          transaction.add(SystemProgram.transfer({
+            fromPubkey: feePayerPubKey,
+            toPubkey: jitoTipAccount,
+            lamports: JITO_TIP
+          }));
+          // console.log('Added Tip to Tx');
+        }
+
+        if (transaction.instructions.length === 0) return null;
+
+        const serialized = transaction.serialize({
+          requireAllSignatures: false,
+          verifySignatures: false
+        }).toString('base64');
+
+        return {
+          serialized,
+          signers
+        };
+      };
+
+      // Chunk wallets into groups of 7
+      const walletChunks = [];
+      for (let i = 0; i < activeWallets.length; i += PACK_SIZE) {
+        walletChunks.push(activeWallets.slice(i, i + PACK_SIZE));
+      }
+
+      console.log(`   - Created ${walletChunks.length} transaction chunks (7 wallets max)`);
+
+      // Process chunks and add tips appropriately
+      // We bundle 5 transactions per Jito Bundle. So every 5th Tx (or last one) needs a Tip.
+      const TXS_PER_BUNDLE = 5;
+
+      for (let i = 0; i < walletChunks.length; i++) {
+        // Determine if this Tx needs a tip
+        // A bucket of 5 Txs needs 1 tip at the end.
+        // Index 0, 1, 2, 3, 4 (Tip). Index 5, 6, 7, 8, 9 (Tip).
+        // Also if it's the very LAST transaction of the whole set, it needs a tip (to close the bundle).
+
+        const isEndOfBundle = (i + 1) % TXS_PER_BUNDLE === 0;
+        const isLastTx = i === walletChunks.length - 1;
+        const needsTip = isEndOfBundle || isLastTx;
+
+        const txObj = createTx(walletChunks[i], needsTip);
+        if (txObj) {
+          transactions.push(txObj);
+        }
+      }
+
+      console.log(`   - Built ${transactions.length} valid transactions`);
+
+      // 3. Send to Client
+      // We send ALL transactions in one bundle. Client signs all. Response handler splits them.
+      const bundleData = {
+        bundles: [transactions], // Single flat list for client to sign
+        totalWallets: activeWallets.length
+      };
+
+      await this.sendBundleSignRequest(
+        parseInt(userId),
+        bundleData,
+        message.requestId,
+        0,
+        [],
+        'gather_sol' // Reuse or new type. 'bundle_buy' handling logic in response just "Returns". 'gather_sol' should act similarly.
+      );
+
+      // Update handleSignBundleResponse to handle 'gather_sol' (skip verification)
+      // Actually I can reuse 'bundle_buy' tag? No, better use 'gather_sol' and update response handler to check for both.
+
+    } catch (error) {
+      console.error('❌ Gather SOL Failed:', error);
+      client.ws.send(JSON.stringify({
+        type: 'error',
+        message: `Gather SOL failed: ${error.message}`
+      }));
+    }
+  }
+
+  async handleDistributeSolRequest(client, message) {
+    const { userId, requestId, senderId, recipients } = message;
+    console.log(`🚀 [MAGIC] Starting Distribution request ${requestId} for user ${userId}...`);
+
+    try {
+      const userWallets = this.userWallets.get(parseInt(userId)) || [];
+      const senderWallet = userWallets.find(w => w.id === senderId);
+      if (!senderWallet) throw new Error('Sender wallet not found');
+
+      const senderPubKey = new PublicKey(senderWallet.publicKey);
+      const rentExempt = 0.00203928 * LAMPORTS_PER_SOL;
+      const serviceFee = 0.001 * LAMPORTS_PER_SOL;
+
+      // Ensure logs directory exists
+      if (!fs.existsSync('server/logs')) {
+        fs.mkdirSync('server/logs', { recursive: true });
+      }
+
+      for (const [idx, recipient] of recipients.entries()) {
+        try {
+          console.log(`🔄 [${idx + 1}/${recipients.length}] Processing recipient ${recipient.walletId}...`);
+
+          const recipientWallet = userWallets.find(w => w.id === recipient.walletId);
+          if (!recipientWallet) {
+            console.error(`⚠️ Recipient ${recipient.walletId} not found in user wallets, skipping.`);
+            continue;
+          }
+          const recipientPubKey = new PublicKey(recipientWallet.publicKey);
+
+          // 1. Generate fresh keypairs
+          const rentFunder = Keypair.generate();
+          const banker = Keypair.generate();
+          const firstCourier = Keypair.generate();
+          const proxy = Keypair.generate();
+          const lastCourier = Keypair.generate();
+
+          // 2. Log ALL generated keys for safety
+          const logEntry = {
+            timestamp: new Date().toISOString(),
+            requestId,
+            recipient: recipientPubKey.toBase58(),
+            keys: {
+              rentFunder: bs58.default.encode(rentFunder.secretKey),
+              banker: bs58.default.encode(banker.secretKey),
+              firstCourier: bs58.default.encode(firstCourier.secretKey),
+              proxy: bs58.default.encode(proxy.secretKey),
+              lastCourier: bs58.default.encode(lastCourier.secretKey)
+            }
+          };
+          fs.appendFileSync('server/logs/magic_transfer_keys_detailed.log', JSON.stringify(logEntry) + '\n');
+
+          // 3. PHASE 1: Fund the Operation (Sender -> RentFunder)
+          console.log(`   🔸 Phase 1: Funding operational budget...`);
+          const { blockhash: fundingBlockhash } = await this.solanaConnection.getLatestBlockhash('confirmed');
+          const fundingTx = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: senderPubKey,
+              toPubkey: rentFunder.publicKey,
+              // Fund 0.006 SOL to cover Banker seed, Tx fees, and multiple buffers
+              lamports: Math.floor(0.006 * LAMPORTS_PER_SOL),
+            })
+          );
+          fundingTx.recentBlockhash = fundingBlockhash;
+          fundingTx.feePayer = senderPubKey;
+
+          const fundingBundle = {
+            bundles: [[{
+              serialized: fundingTx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'),
+              signers: [senderId]
+            }]]
+          };
+
+          const signedFundingTxs = await this.awaitClientSignature(parseInt(userId), fundingBundle, `${requestId}_fund_${idx}`, 0, 'dist_fund');
+
+          // Submit and confirm funding
+          const fundingSig = await this.solanaConnection.sendRawTransaction(Buffer.from(signedFundingTxs[0], 'base64'), { skipPreflight: true });
+          console.log(`   ✅ Funding Tx Submited: ${fundingSig}. Waiting confirmation...`);
+          await this.solanaConnection.confirmTransaction(fundingSig, 'confirmed');
+
+          // 4. PHASE 2: The Magic Transfer Chain (Atomic as per reference)
+          console.log(`   🔸 Phase 2: Executing Magic Transfer chain...`);
+          const { blockhash: magicBlockhash } = await this.solanaConnection.getLatestBlockhash('confirmed');
+          const amountLamports = Math.floor(recipient.amount * LAMPORTS_PER_SOL);
+
+          const firstCourierWSOL = getAssociatedTokenAddressSync(NATIVE_MINT, firstCourier.publicKey);
+          const proxyWSOL = getAssociatedTokenAddressSync(NATIVE_MINT, proxy.publicKey);
+
+          const magicTx = new Transaction();
+          magicTx.recentBlockhash = magicBlockhash;
+          magicTx.feePayer = rentFunder.publicKey; // Rent funder pays the magic tx fee
+
+          // a. Rent Funder -> Banker (Exactly like magic_transfer.ts)
+          // 0.001 SOL buffer ensures Banker exists and is funded for account openings
+          magicTx.add(SystemProgram.transfer({
+            fromPubkey: rentFunder.publicKey,
+            toPubkey: banker.publicKey,
+            lamports: (rentExempt * 2) + (0.001 * LAMPORTS_PER_SOL),
+          }));
+
+          // b. Sender -> First Courier (Principal + Gas Buffer)
+          magicTx.add(SystemProgram.transfer({
+            fromPubkey: senderPubKey,
+            toPubkey: firstCourier.publicKey,
+            lamports: amountLamports + rentExempt + (0.005 * LAMPORTS_PER_SOL),
+          }));
+
+          // c. Banker opens WSOL for First Courier
+          magicTx.add(createAssociatedTokenAccountInstruction(banker.publicKey, firstCourierWSOL, firstCourier.publicKey, NATIVE_MINT));
+
+          // d. First Courier syncs
+          magicTx.add(
+            SystemProgram.transfer({ fromPubkey: firstCourier.publicKey, toPubkey: firstCourierWSOL, lamports: amountLamports }),
+            createSyncNativeInstruction(firstCourierWSOL)
+          );
+
+          // e. Banker opens WSOL for Proxy
+          magicTx.add(createAssociatedTokenAccountInstruction(banker.publicKey, proxyWSOL, proxy.publicKey, NATIVE_MINT));
+
+          // f. Transfer WSOL
+          magicTx.add(createTransferInstruction(firstCourierWSOL, proxyWSOL, firstCourier.publicKey, amountLamports));
+
+          // g. Close accounts to Last Courier
+          magicTx.add(
+            createCloseAccountInstruction(firstCourierWSOL, lastCourier.publicKey, firstCourier.publicKey),
+            createCloseAccountInstruction(proxyWSOL, lastCourier.publicKey, proxy.publicKey)
+          );
+
+          // h. Last Courier -> Recipient
+          magicTx.add(SystemProgram.transfer({
+            fromPubkey: lastCourier.publicKey,
+            toPubkey: recipientPubKey,
+            lamports: amountLamports + (rentExempt * 2), // Forward the released rent
+          }));
+
+          // Pre-sign with server keys
+          magicTx.partialSign(rentFunder, banker, firstCourier, proxy, lastCourier);
+
+          const magicBundle = {
+            bundles: [[{
+              serialized: magicTx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'),
+              signers: [senderId] // Only senderId signature is missing
+            }]]
+          };
+
+          const signedMagicTxs = await this.awaitClientSignature(parseInt(userId), magicBundle, `${requestId}_magic_${idx}`, 0, 'dist_magic');
+
+          const magicSig = await this.solanaConnection.sendRawTransaction(Buffer.from(signedMagicTxs[0], 'base64'), { skipPreflight: true });
+          console.log(`   ✅ Magic Chain Submitted: ${magicSig}. Waiting confirmation...`);
+          await this.solanaConnection.confirmTransaction(magicSig, 'confirmed');
+
+          // Notify UI of success for this recipient
+          const userConnections = this.userConnections.get(parseInt(userId));
+          if (userConnections?.terminal) {
+            userConnections.terminal.ws.send(JSON.stringify({
+              type: 'distribute_sol_update',
+              requestId,
+              status: 'success',
+              recipientId: recipient.walletId,
+              signature: magicSig
+            }));
+          }
+
+        } catch (err) {
+          console.error(`❌ Failed to process recipient ${recipient.walletId}:`, err);
+          const userConnections = this.userConnections.get(parseInt(userId));
+          if (userConnections?.terminal) {
+            userConnections.terminal.ws.send(JSON.stringify({
+              type: 'distribute_sol_update',
+              requestId,
+              status: 'error',
+              recipientId: recipient.walletId,
+              error: err.message
+            }));
+          }
+          // Continue to next recipient? User said 1-by-1, but didn't say stop-on-fail. Common behavior is continue.
+        }
+      }
+
+      console.log(`🎉 Distribution ${requestId} completed!`);
+      const userConnections = this.userConnections.get(parseInt(userId));
+      if (userConnections?.terminal) {
+        userConnections.terminal.ws.send(JSON.stringify({
+          type: 'distribute_sol_response',
+          requestId,
+          success: true,
+          message: 'Magic distribution completed successfully'
+        }));
+      }
+
+    } catch (error) {
+      console.error('❌ Distribute SOL Handler Failed:', error);
+      client.ws.send(JSON.stringify({
+        type: 'error',
+        message: `Magic distribution failed: ${error.message}`
+      }));
+    }
+  }
+
+  async getSPLBalancesBatch(tokenAccountAddresses) {
+    // Fetch all token account info in one batch request
+    const accountInfos = await this.solanaConnection.getMultipleAccountsInfo(tokenAccountAddresses);
+
+    // Extract balances (return 0 if account is null)
+    return accountInfos.map(info => {
+      if (!info) return 0; // Account doesn't exist
+      const data = AccountLayout.decode(info.data);
+      return Number(data.amount); // Convert buffer data to a number
+    });
+  }
+
+  async buildGatherTransactions(senderWallets, destinationWallet, mintPubKey, tokenProgramId) {
+    const { Transaction, SystemProgram } = require('@solana/web3.js');
+    const transactions = [];
+    const bundles = [];
+
+    // Get latest blockhash
+    const { blockhash } = await this.solanaConnection.getLatestBlockhash('finalized');
+
+    // 1. Group senders into Bundles first
+    // Max wallets per bundle = 35 (5 transactions * 7 wallets)
+    const MAX_WALLETS_PER_BUNDLE = this.TRANSACTIONS_PER_BUNDLE * this.WALLETS_PER_TRANSACTION;
+
+    for (let i = 0; i < senderWallets.length; i += MAX_WALLETS_PER_BUNDLE) {
+      const bundleWallets = senderWallets.slice(i, i + MAX_WALLETS_PER_BUNDLE);
+      const bundleTransactions = []; // Store transactions for this specific bundle
+
+      // Identify the Tip Payer (Last wallet in this bundle group)
+      // This wallet MUST have SOL and will pay fees for ALL transactions in this bundle
+      const tipPayerWallet = bundleWallets[bundleWallets.length - 1];
+      const tipPayerPubKey = new PublicKey(tipPayerWallet.wallet.publicKey);
+
+      // 2. Creates transactions within the bundle
+      for (let j = 0; j < bundleWallets.length; j += this.WALLETS_PER_TRANSACTION) {
+        const txGroup = bundleWallets.slice(j, j + this.WALLETS_PER_TRANSACTION);
+
+        const transaction = new Transaction();
+        transaction.recentBlockhash = blockhash;
+
+        // IMPORTANT: FEE PAYER IS ALWAYS THE TIP PAYER
+        transaction.feePayer = tipPayerPubKey;
+
+        const txSigners = [];
+
+        // Add transfers
+        for (const sender of txGroup) {
+          const senderPubKey = new PublicKey(sender.wallet.publicKey);
+
+          const transferIx = createTransferInstruction(
+            new PublicKey(sender.ataAddress),
+            new PublicKey(destinationWallet.ataAddress),
+            senderPubKey,
+            sender.splBalance,
+            [],
+            tokenProgramId
+          );
+
+          transaction.add(transferIx);
+          txSigners.push(sender.wallet.id);
+        }
+
+        // If Tip Payer is NOT in this specific group (txGroup), we must add them as a signer explicitly
+        // because they are paying the fee.
+        // Check if tipPayerWallet is in txGroup
+        const isTipPayerInGroup = txGroup.some(w => w.wallet.id === tipPayerWallet.wallet.id);
+        if (!isTipPayerInGroup) {
+          txSigners.push(tipPayerWallet.wallet.id);
+        }
+
+        // Check if this is the LAST transaction of the bundle -> Add Tip Instruction
+        const isLastTransactionInBundle = (j + this.WALLETS_PER_TRANSACTION) >= bundleWallets.length;
+
+        if (isLastTransactionInBundle) {
+          // Add Jito Tip 
+          // const jitoTipAccount = new PublicKey('DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL'); // Legacy
+          // Use a randomized tip account logic if available, or static for now
+          const jitoTipAccount = new PublicKey('96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5'); // Common Jito Tip Account
+
+          const tipIx = SystemProgram.transfer({
+            fromPubkey: tipPayerPubKey, // Tip comes from Tip Payer
+            toPubkey: jitoTipAccount,
+            lamports: this.JITO_TIP_AMOUNT
+          });
+
+          transaction.add(tipIx);
+          console.log(`💡 Added Jito tip from ${tipPayerWallet.wallet.publicKey} (Bundle Fee Payer)`);
+        }
+
+        // Serialize
+        const serialized = transaction.serialize({
+          requireAllSignatures: false,
+          verifySignatures: false
+        }).toString('base64');
+
+        // Add to global list (for potential reference) and bundle list
+        const txObj = {
+          serialized,
+          signers: txSigners
+        };
+
+        transactions.push(txObj);
+        bundleTransactions.push(txObj);
+      }
+
+      bundles.push(bundleTransactions);
+    }
+
+    return {
+      transactions,
+      bundles,
+      totalWallets: senderWallets.length,
+      destinationWalletId: destinationWallet.wallet.id,
+      destinationDetails: {
+        publicKey: destinationWallet.wallet.publicKey,
+        ataAddress: destinationWallet.ataAddress,
+        initialSplBalance: destinationWallet.splBalance
+      },
+      totalExpectedIncrease: senderWallets.reduce((sum, w) => sum + w.splBalance, 0)
+    };
+  }
+
+  async sendBundleSignRequest(userId, bundleData, originalRequestId, bundleIndex = 0, accumulatedSignedTxs = [], requestType = 'nuke') {
+    const userConnections = this.userConnections.get(userId);
+    if (!userConnections?.wallet) {
+      throw new Error('No wallet client connected');
+    }
+
+    const walletClient = userConnections.wallet;
+    if (!walletClient.ws || walletClient.ws.readyState !== 1) {
+      throw new Error('Wallet client WebSocket not ready');
+    }
+
+    const bundleId = `bundle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Get the specific bundle for this index
+    const currentBundle = bundleData.bundles[bundleIndex];
+
+    const signRequest = {
+      type: 'sign_bundle_request',
+      id: bundleId,
+      timestamp: Date.now(),
+      transactions: currentBundle
+    };
+
+    console.log(`📤 Sending bundle sign request ${bundleId} to wallet client for user ${userId}`);
+    console.log(`   - Bundle ${bundleIndex + 1}/${bundleData.bundles.length}`);
+    console.log(`   - ${currentBundle.length} transactions in this bundle`);
+    console.log(`   - ${bundleData.totalWallets} wallets total in request`);
+
+    // Store the bundle request for later response handling
+    this.pendingBundleRequests.set(bundleId, {
+      userId,
+      bundleData,
+      originalRequestId,
+      bundleIndex,
+      accumulatedSignedTxs,
+      requestType,
+      timestamp: Date.now()
+    });
+
+    walletClient.ws.send(JSON.stringify(signRequest));
+
+    // Set timeout to clean up pending request
+    setTimeout(() => {
+      if (this.pendingBundleRequests.has(bundleId)) {
+        console.log(`⏰ Bundle sign request ${bundleId} timed out`);
+        this.pendingBundleRequests.delete(bundleId);
+
+        // Notify terminal of timeout
+        const userConnections = this.userConnections.get(userId);
+        if (userConnections?.terminal) {
+          userConnections.terminal.ws.send(JSON.stringify({
+            type: 'nuke_response',
+            requestId: originalRequestId,
+            success: false,
+            error: 'Bundle signing timed out'
+          }));
+        }
+      }
+    }, 30000); // 30 second timeout
+  }
+
+  async handleSignBundleResponse(client, message) {
+    const { requestId, status, signedTransactions, reason } = message;
+
+    console.log(`📥 Received bundle sign response for request ${requestId}: ${status}`);
+
+    const pendingRequest = this.pendingBundleRequests.get(requestId);
+    if (!pendingRequest) {
+      console.log(`⚠️ No pending bundle request found for ${requestId} (Total pending: ${this.pendingBundleRequests.size})`);
+      return;
+    }
+
+    // Remove from pending
+    this.pendingBundleRequests.delete(requestId);
+
+    if (status === 'failed') {
+      console.log(`❌ Bundle signing failed: ${reason}`);
+
+      // Notify terminal client
+      const userConnections = this.userConnections.get(pendingRequest.userId);
+      if (userConnections?.terminal) {
+        userConnections.terminal.ws.send(JSON.stringify({
+          type: 'nuke_response',
+          requestId: pendingRequest.originalRequestId,
+          success: false,
+          error: reason || 'Bundle signing failed'
+        }));
+      }
+
+      // Handle synchronous resolver rejection
+      const resolver = this.pendingSignResolvers.get(requestId);
+      if (resolver) {
+        resolver.reject(new Error(reason || 'Bundle signing failed'));
+      }
+      return;
+    }
+
+    try {
+      console.log(`✅ Bundle ${pendingRequest.bundleIndex + 1} signed successfully with ${signedTransactions.length} transactions`);
+
+      // Accumulate signed transactions
+      const allSignedTransactions = [...pendingRequest.accumulatedSignedTxs, ...signedTransactions];
+
+      // Check if this request is being awaited synchronously (e.g. Sequential Magic Transfer)
+      if (pendingRequest.isAwaited) {
+        const resolver = this.pendingSignResolvers.get(requestId);
+        if (resolver) {
+          resolver.resolve(allSignedTransactions);
+          return; // Exit: Caller will handle submission or next steps
+        }
+      }
+
+      // Check if there are more bundles to process
+      const nextBundleIndex = pendingRequest.bundleIndex + 1;
+      if (nextBundleIndex < pendingRequest.bundleData.bundles.length) {
+        console.log(`🔄 Proceeding to bundle ${nextBundleIndex + 1}/${pendingRequest.bundleData.bundles.length}`);
+
+        // Send next bundle request
+        await this.sendBundleSignRequest(
+          pendingRequest.userId,
+          pendingRequest.bundleData,
+          pendingRequest.originalRequestId,
+          nextBundleIndex,
+          allSignedTransactions
+        );
+        return;
+      }
+
+      // All bundles processed!
+      console.log(`🎉 All ${allSignedTransactions.length} transactions signed across ${pendingRequest.bundleData.bundles.length} bundles`);
+
+      // Convert ALL Base64 transactions to Base58 for Jito
+      const signedTransactionsBase58 = allSignedTransactions.map(txBase64 => {
+        try {
+          // Some environments need .default, some don't. Try both or use a safe check.
+          const encoder = bs58.encode || (bs58.default && bs58.default.encode);
+          if (!encoder) throw new Error('bs58 encoder not found');
+          return encoder(Buffer.from(txBase64, 'base64'));
+        } catch (e) {
+          console.error('❌ Base58 encoding error:', e.message);
+          return null;
+        }
+      }).filter(Boolean);
+
+      // Split back into bundles (Phase 3 Fix: Respect Jito limits)
+      const jitoBundles = [];
+      for (let i = 0; i < signedTransactionsBase58.length; i += this.TRANSACTIONS_PER_BUNDLE) {
+        const bundleTxs = signedTransactionsBase58.slice(i, i + this.TRANSACTIONS_PER_BUNDLE);
+        const jitoPayload = {
+          "jsonrpc": "2.0",
+          "id": jitoBundles.length + 1,
+          "method": "sendBundle",
+          "params": [
+            bundleTxs,
+            { "encoding": "base58" }
+          ]
+        };
+        jitoBundles.push(jitoPayload);
+      }
+
+      console.log(`📦 Prepared ${jitoBundles.length} Jito Bundle(s)`);
+      jitoBundles.forEach((payload, idx) => {
+        const size = JSON.stringify(payload).length;
+        console.log(`--- Bundle ${idx + 1} (${payload.params[0].length} txs, ${size} bytes) ---`);
+      });
+      // console.log(JSON.stringify(jitoPayload, null, 2));
+
+      // Phase 8: Jito Submission (Spam Strategy)
+      const allBundleIds = [];
+      const successfulBundles = [];
+
+      for (const [idx, jitoPayload] of jitoBundles.entries()) {
+        console.log(`🚀 Spamming Jito Bundle ${idx + 1}/${jitoBundles.length}...`);
+
+        // Create 10 parallel requests distributed across endpoints
+        // OPTIMIZATION: Stop spamming if one succeeds (Race Logic or simple check)
+        const sendPromises = [];
+        let bundleSuccess = false;
+        let successResult = null;
+
+        // We run promises but we want to know ASAP if one worked.
+        // Simple Promise.any logic? Node environment might not support.
+        // We will just process all but track success.
+
+        for (let i = 0; i < 10; i++) {
+          const endpoint = JITO_ENDPOINTS[i % JITO_ENDPOINTS.length];
+          sendPromises.push(
+            this.sendJitoBundle(jitoPayload, endpoint)
+              .then(bundleId => ({ success: true, bundleId, endpoint }))
+              .catch(err => ({ success: false, error: err.message, endpoint }))
+          );
+        }
+
+        // Wait for all spam attempts (improving this to Promise.any would be faster but this is robust)
+        const results = await Promise.all(sendPromises);
+
+        // Check for successes
+        const successes = results.filter(r => r.success);
+        if (successes.length > 0) {
+          const bundleId = successes[0].bundleId; // All successful ones should have same ID
+          allBundleIds.push(bundleId);
+          console.log(`✅ Bundle ${idx + 1} Submitted! ID: ${bundleId}`);
+          console.log(`   - Success Rate: ${successes.length}/10`);
+
+          successfulBundles.push({
+            bundleIndex: idx,
+            bundleId: bundleId
+          });
+
+          bundleSuccess = true;
+        } else {
+          console.error(`❌ Bundle ${idx + 1} FAILED to submit (0/10 success)`);
+          // Group errors by message to avoid log spam if many are the same
+          const errorCounts = {};
+          results.forEach(r => {
+            if (!r.success) {
+              errorCounts[r.error] = (errorCounts[r.error] || 0) + 1;
+            }
+          });
+          Object.entries(errorCounts).forEach(([err, count]) => {
+            console.error(`   - Error: ${err} (${count}/10 endpoints)`);
+          });
+        }
+
+        // SEQUENTIAL DELAY: REMOVED for Speed.
+        // We fire immediately after success.
+        // if (idx < jitoBundles.length - 1 && bundleSuccess) {
+        //   console.log('⏳ Waiting 1000ms before next bundle to ensure sequential blocks...');
+        //   await new Promise(r => setTimeout(r, 1000));
+        // }
+      }
+
+      if (successfulBundles.length === 0) {
+        throw new Error('All Jito bundle submissions failed');
+      }
+
+      // If this was a BUNDLE BUY or GATHER SOL, we stop here (no gather verification needed)
+      if (pendingRequest.requestType === 'bundle_buy' || pendingRequest.requestType === 'gather_sol') {
+        console.log(`✅ ${pendingRequest.requestType} submission complete. Notifying client.`);
+
+        const userConnections = this.userConnections.get(pendingRequest.userId);
+        if (userConnections?.terminal) {
+          const isGather = pendingRequest.requestType === 'gather_sol';
+          const msg = isGather
+            ? `Gather SOL Submitted! (${successfulBundles.length} bundles sent)`
+            : `Bundle Buy submitted to Jito! (ID: ${successfulBundles[0].bundleId})`;
+
+          userConnections.terminal.ws.send(JSON.stringify({
+            type: isGather ? 'gather_sol_response' : 'bundle_buy_response',
+            requestId: pendingRequest.originalRequestId, // bundle_buy_TIMESTAMP
+            success: true,
+            message: msg,
+            bundleIds: allBundleIds
+          }));
+        }
+        return;
+      }
+
+      // Phase 9: Balance Check Verification (No Jito Status)
+      console.log(`⏳ Verifying via balance check...`);
+      const { destinationDetails, totalExpectedIncrease } = pendingRequest.bundleData;
+
+      const success = await this.verifyViaBalance(
+        destinationDetails.ataAddress,
+        destinationDetails.initialSplBalance,
+        totalExpectedIncrease
+      );
+
+      const userConnections = this.userConnections.get(pendingRequest.userId);
+
+      if (success) {
+        console.log('✅ Gathering verified! Starting sell phase...');
+
+        // Notify gathering success first
+        if (userConnections?.terminal) {
+          userConnections.terminal.ws.send(JSON.stringify({
+            type: 'nuke_gather_complete',
+            requestId: pendingRequest.originalRequestId,
+            success: true,
+            phase: 'gather_complete',
+            message: `Tokens gathered! Initiating sell...`,
+            bundleIds: allBundleIds
+          }));
+        }
+
+        try {
+          const { destinationWalletId, mintAddress, protocol, pairAddress, slippage } = pendingRequest.bundleData;
+
+          await this.sellGatheredTokens(
+            pendingRequest.userId,
+            destinationWalletId,
+            mintAddress,
+            protocol,
+            pairAddress,
+            slippage
+          );
+
+          // Note: The sellGatheredTokens sends its own sign request to client. 
+          // Client will respond with 'sign_transaction_response' handled elsewhere.
+
+        } catch (sellError) {
+          console.error('❌ Automatic sell failed:', sellError);
+          if (userConnections?.terminal) {
+            userConnections.terminal.ws.send(JSON.stringify({
+              type: 'nuke_status_update',
+              requestId: pendingRequest.originalRequestId,
+              status: 'error',
+              message: `Gathered successfully but sell failed: ${sellError.message}`
+            }));
+          }
+        }
+      } else {
+        // Verification failed/timeout
+        if (userConnections?.terminal) {
+          userConnections.terminal.ws.send(JSON.stringify({
+            type: 'nuke_gather_complete',
+            requestId: pendingRequest.originalRequestId,
+            success: false,
+            phase: 'verification_failed',
+            message: `Verification timed out. Check balance manually.`,
+            bundleIds: allBundleIds
+          }));
+        }
+      }
+
+      console.log(`📦 Nuke complete - Outcome: ${success ? 'SUCCESS' : 'TIMEOUT/UNKNOWN'}`);
+
+    } catch (error) {
+      console.error('❌ Error processing signed bundle:', error);
+
+      const userConnections = this.userConnections.get(pendingRequest.userId);
+      if (userConnections?.terminal) {
+        userConnections.terminal.ws.send(JSON.stringify({
+          type: 'nuke_response',
+          requestId: pendingRequest.originalRequestId,
+          success: false,
+          error: error.message
+        }));
+      }
+    }
+  }
+
+  async sellGatheredTokens(userId, destinationWalletId, mintAddress, protocol = 'v1', pairAddress = null, slippage = 5) {
+    console.log(`💰 Starting sell for gathered tokens...`);
+    console.log(`   - Protocol: ${protocol}`);
+    console.log(`   - Mint: ${mintAddress}`);
+
+    try {
+      // UserId is passed as argument
+
+      const userWallets = this.userWallets.get(userId) || [];
+      const walletIdStr = destinationWalletId.toString();
+      const wallet = userWallets.find(w => w.id === walletIdStr);
+
+      if (!wallet) {
+        throw new Error(`Destination wallet ${destinationWalletId} not found for user ${userId}`);
+      }
+
+      const walletPubKey = new PublicKey(wallet.publicKey);
+      const mintPubKey = new PublicKey(mintAddress);
+
+      // Get current token balance (Exact amount gathered)
+      const mintInfo = await this.solanaConnection.getAccountInfo(mintPubKey);
+      if (!mintInfo) {
+        throw new Error('Failed to fetch mint info');
+      }
+      const tokenProgramId = mintInfo.owner;
+
+      const ata = getAssociatedTokenAddressSync(
+        mintPubKey,
+        walletPubKey,
+        false,
+        tokenProgramId,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      const balance = await this.solanaConnection.getTokenAccountBalance(ata);
+      const tokenAmountBN = new BN(balance.value.amount);
+      const tokenAmountUi = balance.value.uiAmount;
+
+      console.log(`   - Wallet: ${wallet.name} (${wallet.publicKey})`);
+      console.log(`   - Token Balance: ${tokenAmountUi} (${tokenAmountBN.toString()} raw)`);
+
+      if (tokenAmountBN.isZero()) {
+        throw new Error('No tokens to sell');
+      }
+
+      // Reuse handleBuildPumpSell logic
+      console.log('🔄 Reusing handleBuildPumpSell logic...');
+
+      // Mock client object to capture the response
+      const mockClient = {
+        id: `internal_nuke_${Date.now()}`,
+        authenticated: true,
+        userId: userId,
+        ws: {
+          send: (msg) => {
+            try {
+              const parsed = JSON.parse(msg);
+              if (parsed.type === 'build_pump_sell_response' && !parsed.success) {
+                console.error('❌ Internal sell build failed:', parsed.error);
+              } else if (parsed.success) {
+                console.log('✅ Internal sell build success!');
+              }
+            } catch (e) {
+              console.log('📤 Internal message:', msg);
+            }
+          }
+        }
+      };
+
+      // Mock message payload
+      const mockMessage = {
+        requestId: `nuke_sell_${Date.now()}`,
+        userId: userId,
+        mintAddress: mintAddress,
+        tokenAmount: tokenAmountUi.toString(), // handleBuildPumpSell expects UI amount string
+        walletPublicKey: wallet.publicKey,
+        walletId: walletIdStr,
+        slippage: slippage,
+        protocol: protocol,
+        pairAddress: pairAddress
+      };
+
+      // Call the handler directly
+      await this.handleBuildPumpSell(mockClient, mockMessage);
+
+      return { success: true, amount: tokenAmountBN.toString() };
+
+    } catch (err) {
+      console.error("❌ Sell setup failed:", err);
+      // Don't throw, just log so the main flow continues
+    }
+  }
+
+  async sendJitoBundle(payload, endpointName) {
+    try {
+      //console.log("payload : ", payload);
+      // Ensure no trailing slash in proxy URL
+      const proxyBase = JITO_PROXY_URL.endsWith('/') ? JITO_PROXY_URL.slice(0, -1) : JITO_PROXY_URL;
+      const url = `${proxyBase}/api/v1/bundles?endpoint=${endpointName}`;
+
+      const response = await axios.post(url, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 5000 // 5s timeout
+      });
+
+      if (response.data.error) {
+        throw new Error(response.data.error.message);
+      }
+
+      return response.data.result; // Returns the Bundle ID
+    } catch (error) {
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        let msg = error.response.data?.error?.message || error.response.data || error.message;
+        if (typeof msg === 'object') {
+          msg = JSON.stringify(msg);
+        }
+        throw new Error(`Jito API Error: ${msg}`);
+      } else if (error.request) {
+        // The request was made but no response was received
+        throw new Error(`Jito Proxy Timeout/Unreachable: ${error.message}`);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  async verifyViaBalance(ataAddress, initialBalance, expectedIncrease) {
+    const MAX_RETRIES = 60; // 60 seconds (1s interval)
+    console.log(`🔎 checking balance [${ataAddress}]...`);
+    //console.log(`   - Initial: ${initialBalance}`);
+    //console.log(`   - Expected Increase: +${expectedIncrease}`);
+    //console.log(`   - Target: >= ${initialBalance + expectedIncrease}`);
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      try {
+        const balanceResponse = await this.solanaConnection.getTokenAccountBalance(new PublicKey(ataAddress));
+        const currentAmount = parseInt(balanceResponse.value.amount);
+
+        // Check if balance increased by at least the expected amount
+        // Note: We use expectedIncrease which is sum of splBalances. 
+        // If some transfers fail, this might not match exactly.
+        // But for "success" signal, any significant increase is good.
+        // Let's rely on receiving > initial.
+
+        const increased = currentAmount - initialBalance;
+        if (increased >= expectedIncrease) {
+          console.log(`✅ Balance Verified! Increased by ${increased} (Expected ${expectedIncrease})`);
+          return true;
+        } else if (increased > 0) {
+          // Partial success? Keep waiting for full amount
+          // console.log(`   - Partial increase: +${increased}/${expectedIncrease}...`);
+        }
+
+      } catch (err) {
+        console.warn(`   - Balance check error: ${err.message}`);
+      }
+
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    console.warn(`⚠️ Balance verification timed out`);
+    return false;
+  }
 }
 
 // SOL Balance Polling Service
@@ -1371,12 +2846,10 @@ class SolBalancePoller {
     this.lastBalances = new Map(); // userId -> Map<pubKey, balance>
   }
 
-  startPollingForUser(userId, walletPubKeys, tokenInfo = null) {
-    // Stop any existing polling for this user
-    this.stopPollingForUser(userId);
-
-    if (walletPubKeys.length === 0) {
-      //console.log(`⚠️ No wallets to poll for user ${userId}`);
+  // Monitor SOL balance changes for a specific user's wallets
+  async startPollingForUser(userId, walletPubKeys, tokenInfo = null) {
+    if (!walletPubKeys || walletPubKeys.length === 0) {
+      console.log(`⚠️ No wallets to poll for user ${userId}`);
       return;
     }
 
@@ -1505,7 +2978,7 @@ class SolBalancePoller {
     try {
       // Use fixed 6 decimals as requested
       const decimals = 6;
-      console.log(`📏 Using fixed 6 decimals for token ${tokenInfo.mintAddress}`);
+      //console.log(`📏 Using fixed 6 decimals for token ${tokenInfo.mintAddress}`);
 
       // Get ATA addresses for all wallets
       const ataAddresses = walletPubKeys.map(walletPubKey => {
@@ -1540,7 +3013,7 @@ class SolBalancePoller {
           const rawBalance = Number(balanceBytes.readBigUInt64LE());
           balance = rawBalance / Math.pow(10, decimals);
 
-          console.log(`🪙 ${walletPubKey.substring(0, 8)}...: ${balance} ${tokenInfo.mintAddress.substring(0, 8)}...`);
+          //console.log(`🪙 ${walletPubKey.substring(0, 8)}...: ${balance} ${tokenInfo.mintAddress.substring(0, 8)}...`);
         }
 
         splBalances.set(walletPubKey, balance);
