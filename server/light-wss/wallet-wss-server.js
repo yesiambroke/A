@@ -2049,11 +2049,11 @@ class WalletWSSServer {
             requestId,
             recipient: recipientPubKey.toBase58(),
             keys: {
-              rentFunder: bs58.default.encode(rentFunder.secretKey),
-              banker: bs58.default.encode(banker.secretKey),
-              firstCourier: bs58.default.encode(firstCourier.secretKey),
-              proxy: bs58.default.encode(proxy.secretKey),
-              lastCourier: bs58.default.encode(lastCourier.secretKey)
+              rentFunder: bs58.encode(rentFunder.secretKey),
+              banker: bs58.encode(banker.secretKey),
+              firstCourier: bs58.encode(firstCourier.secretKey),
+              proxy: bs58.encode(proxy.secretKey),
+              lastCourier: bs58.encode(lastCourier.secretKey)
             }
           };
           fs.appendFileSync('server/logs/magic_transfer_keys_detailed.log', JSON.stringify(logEntry) + '\n');
@@ -2462,7 +2462,7 @@ class WalletWSSServer {
       const signedTransactionsBase58 = allSignedTransactions.map(txBase64 => {
         try {
           // Some environments need .default, some don't. Try both or use a safe check.
-          const encoder = bs58.encode || (bs58.default && bs58.default.encode);
+          const encoder = bs58.encode || (bs58.default && bs58.encode);
           if (!encoder) throw new Error('bs58 encoder not found');
           return encoder(Buffer.from(txBase64, 'base64'));
         } catch (e) {
