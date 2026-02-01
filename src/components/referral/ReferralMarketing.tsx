@@ -114,25 +114,18 @@ const ReferralMarketing = () => {
             A-TRADE REFERRAL PROGRAM
           </h1>
           <p className="text-sm text-green-200 max-w-xl mx-auto leading-relaxed">
-            Earn 25% commission when your referrals upgrade to Pro membership. Future revenue sharing from trading fees available.
+            Earn 20% commission when your referrals upgrade to Pro membership. Your friends also receive a 20% discount! Future revenue sharing from trading fees available.
           </p>
         </div>
 
-        {/* Referral Program Section */}
+        {/* Referral Program Section - Simplified */}
         <div className="border border-green-500/40 bg-black/50 p-4 space-y-3">
-          <h2 className="text-lg font-bold text-green-300 text-center">How It Works</h2>
-
           <div className="text-center space-y-4">
-            <p className="text-green-200">
-              Earn 25% commission when your referrals upgrade to Pro membership.
-              Future revenue sharing from trading fees available.
-            </p>
-
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div className="bg-green-500/10 border border-green-500/30 rounded p-4 text-center">
                   <div className="text-2xl mb-2 text-green-500">◎</div>
-                  <div className="text-green-400 font-bold mb-1">25% Commission</div>
+                  <div className="text-green-400 font-bold mb-1">20% Commission</div>
                   <div className="text-green-300/70 text-xs">From referral Pro upgrades</div>
                 </div>
                 <div className="bg-green-500/10 border border-green-500/30 rounded p-4 text-center">

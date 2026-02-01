@@ -31,6 +31,8 @@ interface LadderSellModalProps {
     slippage?: number;
     protocol?: 'v1' | 'amm';
     pairAddress?: string;
+    useJito?: boolean;
+    jitoTipAmount?: number | null;
   }) => Promise<{
     success: boolean;
     instructions?: any[];
@@ -41,6 +43,8 @@ interface LadderSellModalProps {
   slippage: string;
   protocolType: 'v1' | 'amm' | null;
   pairInfo: any;
+  accountId?: string;
+  jitoTip: number | null;
 }
 
 const LadderSellModal: React.FC<LadderSellModalProps> = ({
@@ -58,7 +62,8 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
   buildPumpSellInstructions,
   slippage,
   protocolType,
-  pairInfo
+  pairInfo,
+  jitoTip
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -242,7 +247,9 @@ const LadderSellModal: React.FC<LadderSellModalProps> = ({
             walletId: walletId,
             slippage: parseFloat(slippage) || 5,
             protocol: protocolType || 'v1',
-            pairAddress: pairInfo?.pairAddress
+            pairAddress: pairInfo?.pairAddress,
+            useJito: useJito,
+            jitoTipAmount: jitoTip
           });
 
           if (!result.success) {

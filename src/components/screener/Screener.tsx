@@ -2,6 +2,7 @@
 
 import React from 'react';
 import ReactDOMServer from 'react-dom/server';
+import { useRouter } from 'next/navigation';
 import { useMarketData } from '@/hooks/useMarketData';
 import { FavoritesWidget, type FavoriteWidgetCoin } from '@/components/shared/favorites-widget';
 
@@ -10,222 +11,228 @@ const CustomIcons = {
   // Coin icons for trending section
   coinIcons: [
     <svg key="1" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2"/>
-      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>,
     <svg key="2" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>,
     <svg key="3" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-      <path d="M9 9h6M9 12h6M9 15h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
+      <path d="M9 9h6M9 12h6M9 15h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>,
     <svg key="4" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>,
     <svg key="5" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-      <path d="M12 1v6M12 17v6M1 12h6M17 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 1v6M12 17v6M1 12h6M17 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>,
     <svg key="6" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2"/>
-      <line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" strokeWidth="2"/>
-      <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="2"/>
+      <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
+      <line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" strokeWidth="2" />
+      <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="2" />
     </svg>,
     <svg key="7" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
-      <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" strokeWidth="2"/>
-      <line x1="2" y1="8.5" x2="22" y2="15.5" stroke="currentColor" strokeWidth="2"/>
+      <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" strokeWidth="2" />
+      <line x1="2" y1="8.5" x2="22" y2="15.5" stroke="currentColor" strokeWidth="2" />
     </svg>,
     <svg key="8" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
-      <rect x="8" y="8" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="2"/>
-      <line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" strokeWidth="2"/>
-      <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="2"/>
+      <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2" />
+      <rect x="8" y="8" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="2" />
+      <line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" strokeWidth="2" />
+      <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="2" />
     </svg>,
     <svg key="9" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>,
     <svg key="10" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-      <path d="M8 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+      <path d="M8 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>,
     <svg key="11" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="12" cy="12" r="3" fill="currentColor"/>
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" />
     </svg>,
     <svg key="12" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M4 12h16M4 12l4-4M4 12l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M20 12l-4-4M20 12l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M4 12h16M4 12l4-4M4 12l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M20 12l-4-4M20 12l-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>,
     <svg key="13" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2"/>
-      <path d="M12 6V4M12 20v-2M6 12H4M20 12h-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M18.364 5.636l-1.414 1.414M7.05 16.95l-1.414 1.414M18.364 18.364l-1.414-1.414M7.05 7.05l-1.414-1.414" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 6V4M12 20v-2M6 12H4M20 12h-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M18.364 5.636l-1.414 1.414M7.05 16.95l-1.414 1.414M18.364 18.364l-1.414-1.414M7.05 7.05l-1.414-1.414" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>,
     <svg key="14" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M12 2v6l4 2-4 2v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="12" cy="14" r="2" stroke="currentColor" strokeWidth="2"/>
+      <path d="M12 2v6l4 2-4 2v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="14" r="2" stroke="currentColor" strokeWidth="2" />
     </svg>,
     <svg key="15" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>,
     <svg key="16" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+      <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
     </svg>,
     <svg key="17" viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-      <path d="M2 12h20M12 2v20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2"/>
+      <path d="M2 12h20M12 2v20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" />
     </svg>
   ],
 
   // Section header icons
   trending: (
     <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-      <path d="M4 16l5-5 4 4 7-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M16 6h4v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M4 16l5-5 4 4 7-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16 6h4v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   newMint: (
     <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
-      <path d="M12 7v10M7 12h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M8 8l2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7v10M7 12h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M8 8l2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   ),
 
   finalStretch: (
     <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-      <path d="M6 4v16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M6 5h9l-3 3 3 3H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M12 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M6 4v16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M6 5h9l-3 3 3 3H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   ),
 
   migrated: (
     <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-      <rect x="3" y="6" width="7" height="5" rx="1" stroke="currentColor" strokeWidth="2"/>
-      <rect x="14" y="13" width="7" height="5" rx="1" stroke="currentColor" strokeWidth="2"/>
-      <path d="M10 8h6l-2-2m2 6-2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M14 16H8l2 2m-2-6 2 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <rect x="3" y="6" width="7" height="5" rx="1" stroke="currentColor" strokeWidth="2" />
+      <rect x="14" y="13" width="7" height="5" rx="1" stroke="currentColor" strokeWidth="2" />
+      <path d="M10 8h6l-2-2m2 6-2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 16H8l2 2m-2-6 2 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   // Metric icons
   liquidity: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   buy: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M7 13l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M7 13l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   sell: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M17 11l-3-3-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M17 11l-3-3-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   burn: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   mayhem: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   paid: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2"/>
-      <line x1="6" y1="9" x2="6" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-      <line x1="10" y1="9" x2="10" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-      <line x1="14" y1="9" x2="14" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
+      <line x1="6" y1="9" x2="6" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="10" y1="9" x2="10" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="14" y1="9" x2="14" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   ),
 
   dev: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M14.7 6.3a1 1 0 0 0-1.4 1.4l1.6 1.6a1 1 0 0 0 1.4-1.4l-1.6-1.6zM9.3 17.7a1 1 0 0 0 1.4-1.4l-1.6-1.6a1 1 0 0 0-1.4 1.4l1.6 1.6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M12 2v6l4 2-4 2v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M14.7 6.3a1 1 0 0 0-1.4 1.4l1.6 1.6a1 1 0 0 0 1.4-1.4l-1.6-1.6zM9.3 17.7a1 1 0 0 0 1.4-1.4l-1.6-1.6a1 1 0 0 0-1.4 1.4l1.6 1.6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 2v6l4 2-4 2v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   sniper: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-      <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2"/>
-      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2"/>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2" />
     </svg>
   ),
 
   insider: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="2"/>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="2" />
     </svg>
   ),
 
   bundler: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-      <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2"/>
+      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
+      <rect x="7" y="7" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="2" />
     </svg>
   ),
 
   top10: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <circle cx="12" cy="8" r="7" stroke="currentColor" strokeWidth="2"/>
-      <path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="12" cy="8" r="7" stroke="currentColor" strokeWidth="2" />
+      <path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   holders: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="2"/>
-      <circle cx="16" cy="10" r="3" stroke="currentColor" strokeWidth="2"/>
-      <path d="M3 18c0-2.5 2.5-4 5-4h4.5c2.5 0 5 1.5 5 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="2" />
+      <circle cx="16" cy="10" r="3" stroke="currentColor" strokeWidth="2" />
+      <path d="M3 18c0-2.5 2.5-4 5-4h4.5c2.5 0 5 1.5 5 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   ),
 
   check: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   transactions: (
     <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-      <path d="M4 4v16l16-8L4 4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M4 4v16l16-8L4 4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   star: (
     <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-      <path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.1L12 17.8 6.5 20l1-6.1-4.5-4.4 6.2-.9L12 3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.1L12 17.8 6.5 20l1-6.1-4.5-4.4 6.2-.9L12 3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
 
   starFilled: (
     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-      <path d="M12 2.5l2.9 5.8 6.4.9-4.6 4.5 1.1 6.4L12 17.9l-5.8 3.2 1.1-6.4-4.6-4.5 6.4-.9L12 2.5z"/>
+      <path d="M12 2.5l2.9 5.8 6.4.9-4.6 4.5 1.1 6.4L12 17.9l-5.8 3.2 1.1-6.4-4.6-4.5 6.4-.9L12 2.5z" />
+    </svg>
+  ),
+  recent: (
+    <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   )
 };
 
 type OperatorProps = {
-  userId: number;
-  tier: string;
+  accountId: string;
+  userTier: string;
   is2faEnabled: boolean;
 };
 
@@ -479,6 +486,7 @@ function normalizeTokenToCoin(token: NormalizedToken, index: number, solPrice: n
 }
 
 const Screener = ({ operator }: ScreenerProps) => {
+  const router = useRouter();
   const { connectionState, marketData, lastError, refreshTrending } = useMarketData();
 
   // Transform market data to Coin format
@@ -523,7 +531,7 @@ const Screener = ({ operator }: ScreenerProps) => {
     migrated: { key: SortKey; dir: SortDir };
   }>({
     newMint: { key: 'recent', dir: 'desc' },
-    finalStretch: { key: 'recent', dir: 'desc' },
+    finalStretch: { key: 'mc', dir: 'desc' },
     migrated: { key: 'recent', dir: 'desc' }
   });
 
@@ -791,95 +799,94 @@ const Screener = ({ operator }: ScreenerProps) => {
                   </div>
                 ) : (
                   trendingCoins.map((coin) => (
-                  <div
-                    key={coin.id}
-                    className="relative min-w-[290px] max-w-[310px] border border-green-400/40 bg-black/60 p-3 hover:bg-green-500/5 hover:border-green-400/60 transition-all duration-200 cursor-pointer rounded"
-                    onClick={() => window.open(`/terminal?coin=${coin.contractAddress}`, '_blank')}
-                  >
-                     {/* Header Row */}
-                     <div className="flex items-start justify-between mb-3">
-                       <div className="flex items-center space-x-3">
-                         <div className="w-10 h-10 bg-green-500/10 border border-green-400/40 flex items-center justify-center flex-shrink-0 rounded">
-                           {coin.imageUrl ? (
-                             <img
-                               src={coin.imageUrl}
-                               alt={`${coin.name} logo`}
-                               className="w-8 h-8 object-cover rounded"
-                               onError={(e) => {
-                                 e.currentTarget.style.display = 'none';
-                                 e.currentTarget.parentElement!.innerHTML = `<div class="text-sm">${coin.icon ? ReactDOMServer.renderToString(coin.icon) : '🔹'}</div>`;
-                               }}
-                             />
-                           ) : (
-                             <span className="text-sm">{coin.icon || '🔹'}</span>
-                           )}
-                         </div>
-                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 text-green-300 font-bold font-mono text-sm">
-                            <span>${coin.symbol}</span>
-                            <a
-                              href={`https://pump.fun/coin/${coin.contractAddress}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-shrink-0 hover:opacity-80 transition-opacity"
-                              onClick={(e) => e.stopPropagation()}
-                              title="View on Pump.fun"
-                            >
+                    <div
+                      key={coin.id}
+                      className="relative min-w-[290px] max-w-[310px] border border-green-400/40 bg-black/60 p-3 hover:bg-green-500/5 hover:border-green-400/60 transition-all duration-200 cursor-pointer rounded"
+                      onClick={() => router.push(`/terminal?coin=${coin.contractAddress}`)}
+                    >
+                      {/* Header Row */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-green-500/10 border border-green-400/40 flex items-center justify-center flex-shrink-0 rounded">
+                            {coin.imageUrl ? (
                               <img
-                                src={
-                                  coin.protocolDetails?.isMayhem
-                                    ? '/logos/mayhem.svg'
-                                    : coin.isMigrated
-                                      ? '/logos/pumpswap.svg'
-                                      : '/logos/pumpfun.svg'
-                                }
-                                alt={
-                                  coin.protocolDetails?.isMayhem
-                                    ? 'Mayhem'
-                                    : coin.isMigrated
-                                      ? 'Pump Swap'
-                                      : 'Pump.fun'
-                                }
-                                className="w-4 h-4"
+                                src={coin.imageUrl}
+                                alt={`${coin.name} logo`}
+                                className="w-8 h-8 object-cover rounded"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.parentElement!.innerHTML = `<div class="text-sm">${coin.icon ? ReactDOMServer.renderToString(coin.icon) : '🔹'}</div>`;
+                                }}
                               />
-                            </a>
+                            ) : (
+                              <span className="text-sm">{coin.icon || '🔹'}</span>
+                            )}
                           </div>
-                          <div className="text-green-200/80 font-mono text-xs truncate max-w-[160px]">
-                            {coin.name.length > 12 ? `${coin.name.substring(0, 12)}...` : coin.name}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 text-green-300 font-bold font-mono text-sm">
+                              <span>${coin.symbol}</span>
+                              <a
+                                href={`https://pump.fun/coin/${coin.contractAddress}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-shrink-0 hover:opacity-80 transition-opacity"
+                                onClick={(e) => e.stopPropagation()}
+                                title="View on Pump.fun"
+                              >
+                                <img
+                                  src={
+                                    coin.protocolDetails?.isMayhem
+                                      ? '/logos/mayhem.svg'
+                                      : coin.isMigrated
+                                        ? '/logos/pumpswap.svg'
+                                        : '/logos/pumpfun.svg'
+                                  }
+                                  alt={
+                                    coin.protocolDetails?.isMayhem
+                                      ? 'Mayhem'
+                                      : coin.isMigrated
+                                        ? 'Pump Swap'
+                                        : 'Pump.fun'
+                                  }
+                                  className="w-4 h-4"
+                                />
+                              </a>
+                            </div>
+                            <div className="text-green-200/80 font-mono text-xs truncate max-w-[160px]">
+                              {coin.name.length > 12 ? `${coin.name.substring(0, 12)}...` : coin.name}
+                            </div>
+                            <div className="text-green-100/70 font-mono text-[11px]">{coin.age}</div>
                           </div>
-                          <div className="text-green-100/70 font-mono text-[11px]">{coin.age}</div>
                         </div>
-                       </div>
 
-                       <div className="flex flex-col items-end space-y-1">
-                         <button
-                           className="absolute bottom-2 right-2 text-yellow-400 hover:text-yellow-300"
-                           onClick={(e) => { e.stopPropagation(); toggleFavorite(coin.contractAddress); }}
-                           title={favorites.has(coin.contractAddress) ? 'Remove from favorites' : 'Add to favorites'}
-                         >
-                           {favorites.has(coin.contractAddress) ? CustomIcons.starFilled : CustomIcons.star}
-                         </button>
-                         <div className="text-green-300 font-bold font-mono text-lg">{coin.mc}</div>
-                         {coin.marketCapChartData &&
-                           Array.isArray(coin.marketCapChartData) &&
-                           coin.marketCapChartData.length >= 2 && (
-                             <div className="flex-shrink-0">
-                               <MiniChart data={coin.marketCapChartData} />
-                             </div>
-                           )}
-                       </div>
-                     </div>
+                        <div className="flex flex-col items-end space-y-1">
+                          <button
+                            className="absolute bottom-2 right-2 text-yellow-400 hover:text-yellow-300"
+                            onClick={(e) => { e.stopPropagation(); toggleFavorite(coin.contractAddress); }}
+                            title={favorites.has(coin.contractAddress) ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            {favorites.has(coin.contractAddress) ? CustomIcons.starFilled : CustomIcons.star}
+                          </button>
+                          <div className="text-green-300 font-bold font-mono text-lg">{coin.mc}</div>
+                          {coin.marketCapChartData &&
+                            Array.isArray(coin.marketCapChartData) &&
+                            coin.marketCapChartData.length >= 2 && (
+                              <div className="flex-shrink-0">
+                                <MiniChart data={coin.marketCapChartData} />
+                              </div>
+                            )}
+                        </div>
+                      </div>
 
-                     {/* Primary Metrics Row - Always visible, no wrapping */}
-                     <div className="flex items-center gap-2 mt-1">
-                       {/* Price Change - Primary metric */}
+                      {/* Primary Metrics Row - Always visible, no wrapping */}
+                      <div className="flex items-center gap-2 mt-1">
+                        {/* Price Change - Primary metric */}
                         {coin.price1hrChange !== null && coin.price1hrChange !== undefined && (
                           <div
-                            className={`px-2 py-0.5 text-xs font-mono font-bold ${
-                              coin.price1hrChange >= 0
-                                ? 'text-green-300 bg-green-500/10 border border-green-400/50'
-                                : 'text-red-300 bg-red-500/10 border border-red-500/40'
-                            }`}
+                            className={`px-2 py-0.5 text-xs font-mono font-bold ${coin.price1hrChange >= 0
+                              ? 'text-green-300 bg-green-500/10 border border-green-400/50'
+                              : 'text-red-300 bg-red-500/10 border border-red-500/40'
+                              }`}
                           >
                             {coin.price1hrChange >= 0 ? '+' : ''}
                             {coin.price1hrChange.toFixed(1)}%
@@ -928,11 +935,10 @@ const Screener = ({ operator }: ScreenerProps) => {
                         {/* LP Burned */}
                         {coin.lpBurned !== undefined && coin.lpBurned !== null && coin.lpBurned > 0 && (
                           <div
-                            className={`flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono border ${
-                              coin.lpBurned >= 100
-                                ? 'text-orange-400 bg-orange-500/10 border-orange-500/30'
-                                : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30'
-                            }`}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono border ${coin.lpBurned >= 100
+                              ? 'text-orange-400 bg-orange-500/10 border-orange-500/30'
+                              : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30'
+                              }`}
                           >
                             {CustomIcons.burn}
                             <span className="font-bold">{coin.lpBurned}%</span>
@@ -959,8 +965,8 @@ const Screener = ({ operator }: ScreenerProps) => {
               </div>
             </div>
           </div>
+        </div>
       </div>
-    </div>
 
       {/* Three Column Grid: New Mint, Final Stretch, Migrated */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1091,8 +1097,8 @@ const Screener = ({ operator }: ScreenerProps) => {
               ))
             )}
           </div>
+        </div>
       </div>
-    </div>
 
       {/* Error Display */}
       {lastError && (
@@ -1171,6 +1177,7 @@ type CoinRowProps = {
 };
 
 function CoinRow({ coin, favorites, onToggleFavorite }: CoinRowProps) {
+  const router = useRouter();
   const [copied, setCopied] = React.useState(false);
   const [nowTick, setNowTick] = React.useState(() => Date.now());
   const priceChange =
@@ -1182,9 +1189,9 @@ function CoinRow({ coin, favorites, onToggleFavorite }: CoinRowProps) {
         ? '5m'
         : coin.price30minChange !== null && coin.price30minChange !== undefined
           ? '30m'
-      : coin.price1hrChange !== null && coin.price1hrChange !== undefined
-        ? '1h'
-        : null;
+          : coin.price1hrChange !== null && coin.price1hrChange !== undefined
+            ? '1h'
+            : null;
   const displayAge = coin.createdAtTs
     ? formatAgeMinutes((nowTick - coin.createdAtTs) / (1000 * 60))
     : coin.age;
@@ -1213,7 +1220,7 @@ function CoinRow({ coin, favorites, onToggleFavorite }: CoinRowProps) {
   return (
     <div
       className="border-b border-green-500/10 px-4 py-3 hover:bg-green-500/5 transition-colors cursor-pointer"
-      onClick={() => window.open(`/terminal?coin=${coin.contractAddress}`, '_blank')}
+      onClick={() => router.push(`/terminal?coin=${coin.contractAddress}`)}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -1295,11 +1302,10 @@ function CoinRow({ coin, favorites, onToggleFavorite }: CoinRowProps) {
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-mono">
         {priceChange !== null && priceLabel && (
           <span
-            className={`px-2 py-0.5 rounded border ${
-              priceChange >= 0
-                ? 'text-green-400 border-green-500/40 bg-green-500/10'
-                : 'text-red-400 border-red-500/40 bg-red-500/10'
-            }`}
+            className={`px-2 py-0.5 rounded border ${priceChange >= 0
+              ? 'text-green-400 border-green-500/40 bg-green-500/10'
+              : 'text-red-400 border-red-500/40 bg-red-500/10'
+              }`}
           >
             {priceLabel}: {priceChange >= 0 ? '+' : ''}
             {priceChange.toFixed(1)}%
@@ -1330,26 +1336,38 @@ function CoinRow({ coin, favorites, onToggleFavorite }: CoinRowProps) {
               ? `Top10: ${toLabel(displayHolders)}`
               : toLabel(displayHolders);
           return (
-            <span className="flex items-center gap-1 text-green-200">
+            <span className="flex items-center gap-1 text-indigo-400 font-mono">
               {CustomIcons.holders}
-              <span className="font-bold">H</span>
-              <span>{label}</span>
+              <span className="font-bold">{label}</span>
             </span>
           );
         })()}
-        {coin.buyCount !== undefined && coin.sellCount !== undefined && (coin.buyCount > 0 || coin.sellCount > 0) && (
-          <span className="flex items-center gap-1 text-purple-400">
-            {CustomIcons.buy}
-            {coin.buyCount}
-            {CustomIcons.sell}
-            {coin.sellCount}
-          </span>
-        )}
+        {(() => {
+          if (coin.buyCount === undefined || coin.sellCount === undefined) return null;
+          if (coin.buyCount === 0 && coin.sellCount === 0) return null;
+
+          const toCountLabel = (val: number) => {
+            if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
+            return val.toString();
+          };
+
+          return (
+            <span className="flex items-center gap-2">
+              <span className="flex items-center gap-0.5">
+                <span className="text-green-500 font-bold">B</span>
+                <span className="text-green-400">{toCountLabel(coin.buyCount)}</span>
+              </span>
+              <span className="flex items-center gap-0.5">
+                <span className="text-red-500 font-bold">S</span>
+                <span className="text-red-400">{toCountLabel(coin.sellCount)}</span>
+              </span>
+            </span>
+          );
+        })()}
         {coin.lpBurned !== undefined && coin.lpBurned !== null && coin.lpBurned > 0 && (
           <span
-            className={`flex items-center gap-1 ${
-              coin.lpBurned >= 100 ? 'text-orange-400' : 'text-yellow-400'
-            }`}
+            className={`flex items-center gap-1 ${coin.lpBurned >= 100 ? 'text-orange-400' : 'text-yellow-400'
+              }`}
           >
             {CustomIcons.burn}
             {coin.lpBurned}%
@@ -1426,18 +1444,20 @@ function SortControls({ current, onChange }: SortControlsProps) {
   };
 
   const btnClass = (key: SortControlsProps['current']['key']) =>
-    `px-2 py-1 text-[11px] font-mono border ${
-      current.key === key ? 'border-green-300 text-green-100' : 'border-green-400/40 text-green-300/80'
+    `px-2 py-1 text-[11px] font-mono border flex items-center gap-1 whitespace-nowrap ${current.key === key ? 'border-green-300 text-green-100' : 'border-green-400/40 text-green-300/80'
     } hover:border-green-200 hover:text-green-100 transition-colors`;
 
   const caret = (key: SortControlsProps['current']['key']) => {
     if (current.key !== key) return '';
     return current.dir === 'desc' ? '↓' : '↑';
-    };
+  };
 
   return (
     <div className="flex items-center gap-1">
-      <button className={btnClass('recent')} onClick={() => toggle('recent')}>Recent {caret('recent')}</button>
+      <button className={btnClass('recent')} onClick={() => toggle('recent')} title="Sort by Recent">
+        {CustomIcons.recent}
+        {caret('recent')}
+      </button>
       <button className={btnClass('mc')} onClick={() => toggle('mc')}>MC {caret('mc')}</button>
       <button className={btnClass('volume')} onClick={() => toggle('volume')}>Vol {caret('volume')}</button>
       <button className={btnClass('holders')} onClick={() => toggle('holders')}>Holders {caret('holders')}</button>
@@ -1579,12 +1599,11 @@ function FilterControls({ current, onChange, options }: FilterControlsProps) {
         onClick={() => setOpen((v) => !v)}
         aria-label="Filter"
       >
-        <span className="flex items-center gap-1">
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 5h16M8 11h8m-4 6h0" />
-            <path d="M10 17h4l-4 4v-4z" />
+        <span className="flex items-center gap-1.5">
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
           </svg>
-          <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" className="w-3 h-3 text-green-400/50" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 9l6 6 6-6" />
           </svg>
         </span>

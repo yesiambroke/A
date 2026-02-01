@@ -11,70 +11,70 @@ const suits = [
 ]
 
 const features = [
-  { 
+  {
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-6 sm:h-6">
-        <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-    ), 
-    title: 'Lightning Fast', 
-    desc: 'Execute trades in milliseconds', 
-    cmd: '> execute --speed=ultra' 
+    ),
+    title: 'Lightning Fast',
+    desc: 'Execute trades in milliseconds',
+    cmd: '> execute --speed=ultra'
   },
-  { 
+  {
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-6 sm:h-6">
-        <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        <path d="M7 12l4-4 4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <path d="M7 12l4-4 4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-    ), 
-    title: 'Real-Time Analytics', 
-    desc: 'Advanced charting and portfolio analytics', 
-    cmd: '> analytics --live=true' 
+    ),
+    title: 'Real-Time Analytics',
+    desc: 'Advanced charting and portfolio analytics',
+    cmd: '> analytics --live=true'
   },
-  { 
+  {
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-6 sm:h-6">
-        <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="2"/>
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
-    ), 
-    title: 'Self-Hosted Private Keys', 
-    desc: 'Full control with self-hosted private key management', 
-    cmd: '> security --self-hosted=true', 
-    badge: 'Soon' 
+    ),
+    title: 'Self-Hosted Private Keys',
+    desc: 'Full control with self-hosted private key management',
+    cmd: '> security --self-hosted=true',
+    badge: 'Soon'
   },
-  { 
+  {
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-6 sm:h-6">
-        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-    ), 
-    title: 'Low Trading Fees', 
-    desc: 'Competitive 0.444% trading fees on all transactions', 
-    cmd: '> fees --rate=0.444%' 
+    ),
+    title: 'Low Trading Fees',
+    desc: 'Competitive 0.444% trading fees on all transactions',
+    cmd: '> fees --rate=0.444%'
   },
-  { 
+  {
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-6 sm:h-6">
-        <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2"/>
-        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" stroke="currentColor" strokeWidth="2"/>
+        <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
+        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" stroke="currentColor" strokeWidth="2" />
       </svg>
-    ), 
-    title: 'Easy Multi Wallet Control', 
-    desc: 'Manage up to 50 active wallets simultaneously', 
-    cmd: '> wallet --max=50' 
+    ),
+    title: 'Easy Multi Wallet Control',
+    desc: 'Manage up to 100 active wallets simultaneously',
+    cmd: '> wallet --max=50'
   },
-  { 
+  {
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-6 sm:h-6">
-        <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
-        <path d="M6 8h12M6 12h12M6 16h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" strokeWidth="2" />
+        <path d="M6 8h12M6 12h12M6 16h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
-    ), 
-    title: 'Advanced Trading Terminal', 
-    desc: 'Professional terminal interface with advanced tools', 
-    cmd: '> terminal --mode=advanced' 
+    ),
+    title: 'Advanced Trading Terminal',
+    desc: 'Professional terminal interface with advanced tools',
+    cmd: '> terminal --mode=advanced'
   }
 ]
 
@@ -161,11 +161,11 @@ export default function LandingPage() {
                 aria-label="Telegram"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.13-.31-1.09-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.13-.31-1.09-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
                 </svg>
               </a>
               <a
-                href="https://x.com/a_trade_dot_fun"
+                href="https://x.com/a_trade_fun"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 hover:opacity-80 transition-opacity"
@@ -188,51 +188,51 @@ export default function LandingPage() {
           {mobileMenuOpen && (
             <div className="md:hidden bg-green-500/95 border-b-2 border-green-600">
               <div className="flex flex-col p-2 gap-2">
-                <a 
-                  href="#features" 
+                <a
+                  href="#features"
                   onClick={() => setMobileMenuOpen(false)}
                   className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded"
                 >
                   FEATURES
                 </a>
-                <a 
-                  href="#how-it-works" 
+                <a
+                  href="#how-it-works"
                   onClick={() => setMobileMenuOpen(false)}
                   className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded"
                 >
                   HOW TO START
                 </a>
-                <a 
-                  href="#faq" 
+                <a
+                  href="#faq"
                   onClick={() => setMobileMenuOpen(false)}
                   className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded"
                 >
                   FAQ
                 </a>
-                  <a
-                    href="/screener"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded"
-                  >
-                    LAUNCH APP
-                  </a>
-                <a 
-                  href="https://t.me/a_trade_dot_fun_bot" 
-                  target="_blank" 
+                <a
+                  href="/screener"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded"
+                >
+                  LAUNCH APP
+                </a>
+                <a
+                  href="https://t.me/a_trade_dot_fun_bot"
+                  target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMobileMenuOpen(false)}
                   className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded flex items-center gap-2"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.13-.31-1.09-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.13-.31-1.09-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
                   </svg>
                   TELEGRAM
                 </a>
-                <a 
-                  href="https://x.com/a_trade_dot_fun" 
-                  target="_blank" 
+                <a
+                  href="https://x.com/a_trade_dot_fun"
+                  target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMobileMenuOpen(false)}
                   className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded flex items-center gap-2"
@@ -251,9 +251,9 @@ export default function LandingPage() {
             <div className="min-h-[calc(100vh-8rem)] sm:min-h-[calc(90vh-4rem)] flex flex-col items-center justify-center text-center relative">
               <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 {suits.map((suit, index) => (
-                  <span 
+                  <span
                     key={suit.name}
-                    className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl animate-pulse text-green-500" 
+                    className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl animate-pulse text-green-500"
                     style={{ animationDelay: `${index * 0.2}s` }}
                   >
                     {suit.symbol}
@@ -263,14 +263,14 @@ export default function LandingPage() {
               <div className="text-xs sm:text-sm md:text-base text-green-500/60 mb-4 sm:mb-6">
                 &ldquo;Trade like you hold the cards&rdquo;
               </div>
-              
+
               <div className="relative h-56 w-40 sm:h-72 sm:w-48 md:h-80 md:w-56 lg:h-96 lg:w-64 mx-auto mb-6 sm:mb-8" style={{ perspective: '1200px' }}>
                 <div
                   className="absolute inset-0 flex items-center justify-center"
                   style={{ animation: `cardSpin 4s linear infinite`, transformStyle: 'preserve-3d' }}
                 >
                   <div className="relative w-40 h-56 sm:w-48 sm:h-72 md:w-56 md:h-80 lg:w-64 lg:h-96" style={{ transformStyle: 'preserve-3d' }}>
-                    <div 
+                    <div
                       className="absolute inset-0 bg-black rounded-lg shadow-2xl shadow-green-500/50 p-3 sm:p-4 md:p-6 flex flex-col justify-between border-2 border-green-500"
                       style={{ backfaceVisibility: 'hidden', transform: 'rotateY(0deg)' }}
                     >
@@ -290,7 +290,7 @@ export default function LandingPage() {
                       </div>
                     </div>
 
-                    <div 
+                    <div
                       className="absolute inset-0 bg-black rounded-lg shadow-2xl shadow-green-500/50 p-3 sm:p-4 md:p-6 flex flex-col items-center justify-center border-2 border-green-500"
                       style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                     >
@@ -311,27 +311,27 @@ export default function LandingPage() {
                 </div>
               </div>
 
-               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-2 mb-4">
-                   <a
-                     href={telegramUrl}
-                   target="_blank"
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-2 mb-4">
+                <a
+                  href={telegramUrl}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3 bg-green-500 text-black font-bold text-sm sm:text-base hover:bg-green-400 border-2 border-green-500 text-center"
                 >
                   Start Trading
                 </a>
-                 <a
-                   href="/screener"
-                   className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3 bg-transparent text-green-500 font-bold text-sm sm:text-base hover:bg-green-500/10 border-2 border-green-500 text-center"
-                 >
-                   Launch App
-                 </a>
+                <a
+                  href="/screener"
+                  className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3 bg-transparent text-green-500 font-bold text-sm sm:text-base hover:bg-green-500/10 border-2 border-green-500 text-center"
+                >
+                  Launch App
+                </a>
               </div>
 
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 animate-bounce">
                 <a href="#features" className="text-green-500/60 hover:text-green-500">
                   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6 sm:w-8 sm:h-8">
-                    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </a>
               </div>

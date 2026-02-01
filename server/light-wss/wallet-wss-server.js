@@ -21,6 +21,19 @@ const JITO_ENDPOINTS = [
   'tokyo'
 ];
 
+const WALLET_LIMITS = {
+  basic: 15,
+  pro: 100
+};
+
+const TRADING_FEES = {
+  basic: 0.00444, // 0.444%
+  pro: 0.00222    // 0.222%
+};
+
+const FEE_RECIPIENT = 'A1zZVRgsJxopzezzsfrB45QQzMW4Tf9HiYWUbx6qzZ3W';
+const JITO_TIP_ADDRESS = '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5';
+
 class WalletWSSServer {
   constructor(port = 4128) {
     this.port = process.env.LIGHT_WSS_PORT || port;
@@ -51,6 +64,13 @@ class WalletWSSServer {
     this.balancePoller.setBalanceUpdateCallback((userId, updates) => {
       this.broadcastBalanceUpdates(userId, updates);
     });
+
+    // Initialize Jito Tip Poller
+    this.jitoTipPoller = new JitoTipPoller();
+    this.jitoTipPoller.onUpdate((tip) => {
+      this.broadcastJitoTip(tip);
+    });
+    this.jitoTipPoller.start();
 
     // Initialize database connection
     this.dbPool = new Pool({
@@ -231,6 +251,12 @@ class WalletWSSServer {
           type: 'auth_failed',
           reason: 'Invalid or expired session'
         }));
+        // Terminate connection after a short delay to allow the message to be sent
+        setTimeout(() => {
+          if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.close(4001, 'Invalid or expired session');
+          }
+        }, 500);
         return;
       }
 
@@ -247,9 +273,9 @@ class WalletWSSServer {
 
       client.ws.send(JSON.stringify({
         type: 'auth_success',
-        userId: client.userId,
         userTier: client.userTier,
-        clientType: 'terminal'
+        clientType: 'terminal',
+        jitoTip: this.jitoTipPoller.getCurrentTip() // Send current tip on connect
       }));
 
     } catch (error) {
@@ -258,6 +284,11 @@ class WalletWSSServer {
         type: 'auth_failed',
         reason: 'Authentication service error'
       }));
+      setTimeout(() => {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.close(4002, 'Authentication service error');
+        }
+      }, 500);
     }
   }
 
@@ -283,6 +314,12 @@ class WalletWSSServer {
           type: 'auth_failed',
           reason: 'Invalid or expired auth key'
         }));
+        // Terminate connection after a short delay
+        setTimeout(() => {
+          if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.close(4003, 'Invalid or expired auth key');
+          }
+        }, 500);
         return;
       }
 
@@ -305,7 +342,6 @@ class WalletWSSServer {
 
       client.ws.send(JSON.stringify({
         type: 'auth_success',
-        userId: client.userId,
         userTier: client.userTier,
         clientType: 'wallet'
       }));
@@ -316,6 +352,11 @@ class WalletWSSServer {
         type: 'auth_failed',
         reason: 'Authentication service error'
       }));
+      setTimeout(() => {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.close(4004, 'Authentication service error');
+        }
+      }, 500);
     }
   }
 
@@ -328,6 +369,15 @@ class WalletWSSServer {
 
     if (client.type === 'terminal') {
       userConnections.terminal = client;
+
+      // Notify new terminal client if wallet is already connected
+      if (userConnections.wallet && userConnections.wallet.ws && userConnections.wallet.ws.readyState === 1) {
+        userConnections.terminal.ws.send(JSON.stringify({
+          type: 'wallet_client_connected',
+          timestamp: Date.now()
+        }));
+        console.log(`📤 Notified new terminal client ${userConnections.terminal.id} that wallet is already present`);
+      }
     } else if (client.type === 'wallet') {
       userConnections.wallet = client;
 
@@ -335,7 +385,6 @@ class WalletWSSServer {
       if (userConnections.terminal && userConnections.terminal.ws && userConnections.terminal.ws.readyState === 1) {
         userConnections.terminal.ws.send(JSON.stringify({
           type: 'wallet_client_connected',
-          userId: client.userId,
           timestamp: Date.now()
         }));
         console.log(`📤 Notified terminal client ${userConnections.terminal.id} that wallet connected`);
@@ -389,11 +438,13 @@ class WalletWSSServer {
       userConnections.wallet = null;
       console.log(`🔌 Wallet client disconnected for user ${client.userId}`);
 
+      // Clear stored wallets since the signing ability is gone
+      this.userWallets.delete(client.userId);
+
       // Notify terminal client that wallet disconnected
       if (userConnections.terminal && userConnections.terminal.ws && userConnections.terminal.ws.readyState === 1) {
         userConnections.terminal.ws.send(JSON.stringify({
           type: 'wallet_client_disconnected',
-          userId: client.userId,
           timestamp: Date.now()
         }));
         console.log(`📤 Notified terminal client ${userConnections.terminal.id} that wallet disconnected`);
@@ -471,7 +522,8 @@ class WalletWSSServer {
           break;
 
         default:
-          console.warn(`Unknown message type from ${client.id}:`, message.type);
+          console.warn(`Unknown message type from ${client.id}: "${message.type}"`);
+          console.log(`📄 Raw message data from ${client.id}:`, data.toString());
       }
     } catch (error) {
       console.error(`Failed to parse message from ${client.id}:`, error);
@@ -481,8 +533,8 @@ class WalletWSSServer {
   async handleBuildPumpBuy(client, message) {
     console.log(`📥 Build Pump V1 Buy request from ${client.id}:`, message);
 
-    // Verify the client is authenticated and matches the requested user
-    if (!client.authenticated || client.userId !== parseInt(message.userId)) {
+    // Verify the client is authenticated
+    if (!client.authenticated) {
       console.log(`❌ Unauthorized build pump buy request from ${client.id}`);
       client.ws.send(JSON.stringify({
         type: 'build_pump_buy_response',
@@ -494,14 +546,14 @@ class WalletWSSServer {
     }
 
     try {
-      const { pairAddress, mintAddress, buyAmount, walletPublicKey, walletId, slippage = 1, protocol = 'v1' } = message;
+      const { pairAddress, mintAddress, buyAmount, walletPublicKey, walletId, slippage = 1, protocol = 'v1', useJito = false } = message;
 
       // For Pump V1, we only need mintAddress, buyAmount, walletPublicKey, walletId
       if (!mintAddress || !buyAmount || !walletPublicKey || !walletId) {
         throw new Error('Missing required parameters: mintAddress, buyAmount, walletPublicKey, walletId');
       }
 
-      console.log(`🔄 Building Pump ${protocol.toUpperCase()} buy instructions for ${mintAddress}, amount: ${buyAmount} SOL`);
+      console.log(`🔄 Building Pump ${protocol.toUpperCase()} buy instructions for ${mintAddress}, amount: ${buyAmount} SOL (Jito: ${useJito})`);
 
       // Convert buy amount to lamports (SOL in smallest unit)
       const solAmountLamports = Math.floor(parseFloat(buyAmount) * 10 ** 9); // 1 SOL = 10^9 lamports
@@ -516,13 +568,18 @@ class WalletWSSServer {
       console.log(`👤 User: ${userPubKey.toBase58()}`);
       console.log(`🎯 Protocol: ${protocol.toUpperCase()}`);
 
+      // Calculate Trading Fee
+      const feeRate = client.userTier === 'pro' ? TRADING_FEES.pro : TRADING_FEES.basic;
+      const feeLamports = Math.floor(solAmountLamports * feeRate);
+      console.log(`💸 Trading Fee (${client.userTier}): ${feeLamports} lamports (${(feeLamports / 10 ** 9).toFixed(6)} SOL)`);
+
       // Step 1: Fetch blockchain data
       console.log('🔄 Step 1: Fetching blockchain data...');
 
       let buyState, tokenProgramId, global, instructions, tokenAmount, instructionArray;
 
       if (protocol === 'v1') {
-        // For Pump V1: SDK auto-discovers bonding curve from mint + user
+        // ... (V1 logic remains same)
         console.log('🔍 Using Pump V1 auto-discovery (no pair address needed)');
 
         // Step 1a: Fetch global state first (required for calculations)
@@ -552,7 +609,7 @@ class WalletWSSServer {
         buyState.global = global;
 
       } else if (protocol === 'amm' && pairAddress) {
-        // For Pump AMM: use pair address as pool key
+        // ... (AMM logic remains same)
         console.log('🔍 Using Pump AMM with pool address');
 
         // Step 1a: Get AMM pool state
@@ -562,21 +619,14 @@ class WalletWSSServer {
         console.log('✅ AMM pool state retrieved');
 
         const { globalConfig, pool, poolBaseAmount, poolQuoteAmount } = swapSolanaState;
-        console.log('globalConfig', globalConfig);
-        console.log('pool', pool);
-        console.log('poolBaseAmount', poolBaseAmount);
-        console.log('poolQuoteAmount', poolQuoteAmount);
         console.log('📊 AMM Pool Information:');
-        console.log(`- Base Reserve: ${poolBaseAmount.toString()} (raw)`);
         console.log(`- Base Reserve: ${(poolBaseAmount.toNumber() / 1_000_000).toLocaleString()} tokens (6 decimals)`);
-        console.log(`- Quote Reserve: ${poolQuoteAmount.toString()} lamports`);
         console.log(`- Quote Reserve: ${(poolQuoteAmount.toNumber() / 1_000_000_000).toFixed(6)} SOL`);
 
         // Step 1b: Calculate token amount from SOL amount using AMM math
         console.log('🔄 Step 1b: Calculating token amount from SOL...');
 
         // For AMM buying: we want to spend solAmountLamports to buy some base tokens
-        // Using AMM constant product formula with fee
         const feeNumerator = new BN(997); // 0.3% fee
         const feeDenominator = new BN(1000);
 
@@ -586,37 +636,25 @@ class WalletWSSServer {
 
         tokenAmount = numerator.div(denominator);
 
-        console.log(`🧮 Calculated token amount: ${tokenAmount.toString()} (raw)`);
         console.log(`🧮 Calculated token amount: ${(tokenAmount.toNumber() / 1_000_000).toLocaleString()} tokens (6 decimals)`);
 
         // Step 2: Build AMM buy instructions
         console.log('🔄 Step 2: Building AMM buy instructions...');
 
-        const instructions = await this.offlinePumpAmmSdk.buyBaseInput(swapSolanaState, tokenAmount, slippage);
-
+        instructions = await this.offlinePumpAmmSdk.buyBaseInput(swapSolanaState, tokenAmount, slippage);
         if (!instructions) {
           throw new Error('Failed to build AMM buy instructions - SDK returned undefined');
         }
 
-        console.log(`✅ Built AMM buy instructions (type: ${typeof instructions})`);
-
-        // Handle both single instruction and array of instructions
         instructionArray = Array.isArray(instructions) ? instructions : [instructions];
-        console.log(`✅ Instruction count: ${instructionArray.length}`);
-
-        // Set variables for response (mimicking V1 structure)
-        buyState = { global: globalConfig }; // Simplified for AMM
-        tokenProgramId = pool.tokenProgram; // From pool data
+        buyState = { global: globalConfig };
+        tokenProgramId = pool.tokenProgram;
       } else {
         throw new Error('Invalid protocol or missing pairAddress for AMM');
       }
 
       if (protocol === 'v1') {
         const { bondingCurveAccountInfo, bondingCurve, associatedUserAccountInfo } = buyState;
-        console.log('Bonding curve account info:', bondingCurveAccountInfo);
-        console.log('Bonding curve:', bondingCurve);
-        console.log('Associated user account info:', associatedUserAccountInfo);
-        console.log('Global:', global);
         // Step 2: Calculate token amount from SOL amount
         console.log('🔄 Step 2: Calculating token amount...');
         tokenAmount = getBuyTokenAmountFromSolAmount({
@@ -626,26 +664,10 @@ class WalletWSSServer {
           bondingCurve,
           amount: solAmountBN,
         });
-        console.log('🧮 Token amount calculation result:', tokenAmount ? tokenAmount.toString() : 'undefined');
         console.log(`🧮 Calculated token amount: ${tokenAmount} (raw value)`);
 
         // Step 3: Build V1 transaction instructions
         console.log('🔄 Step 3: Building V1 buy instructions...');
-        /*
-        console.log('📋 Parameters:', {
-          global: global ? 'exists' : 'null',
-          bondingCurveAccountInfo: bondingCurveAccountInfo ? 'exists' : 'null',
-          bondingCurve: bondingCurve ? 'exists' : 'null',
-          associatedUserAccountInfo: associatedUserAccountInfo ? 'exists' : 'null',
-          mint: mintPubKey.toBase58(),
-          user: userPubKey.toBase58(),
-          amount: tokenAmount ? tokenAmount.toString() : 'null',
-          solAmount: solAmountBN.toString(),
-          slippage,
-          tokenProgram: tokenProgramId.toBase58()
-        });
-        */
-
         instructions = await this.offlinePumpSdk.buyInstructions({
           global,
           bondingCurveAccountInfo,
@@ -661,12 +683,38 @@ class WalletWSSServer {
 
         console.log(`✅ Built ${instructions.length} V1 transaction instructions`);
         instructionArray = Array.isArray(instructions) ? instructions : [instructions];
-      } else {
-        // For AMM, instructions were already built above
-        console.log(`✅ Using pre-built AMM instructions (${instructionArray.length} instructions)`);
       }
 
-      // Step 4: Serialize instructions for transmission
+      // Step 4: Add Trading Fee Instruction
+      if (feeLamports > 0) {
+        const feeIx = SystemProgram.transfer({
+          fromPubkey: userPubKey,
+          toPubkey: new PublicKey(FEE_RECIPIENT),
+          lamports: feeLamports
+        });
+        instructionArray.push(feeIx);
+        console.log(`💸 Added trading fee instruction (${feeLamports} lamports)`);
+      }
+
+      // Step 5: Add Jito Tip Instruction
+      if (useJito) {
+        // Use server's polled tip or default to 0.001 SOL (fallback)
+        const currentTip = this.jitoTipPoller ? this.jitoTipPoller.tipFloor : 0;
+        const tipStart = currentTip > 0 ? currentTip : 0.001;
+
+        const tipLamports = Math.floor(tipStart * LAMPORTS_PER_SOL);
+
+        const jitoTipAccount = new PublicKey(JITO_TIP_ADDRESS);
+        const tipIx = SystemProgram.transfer({
+          fromPubkey: userPubKey,
+          toPubkey: jitoTipAccount,
+          lamports: tipLamports
+        });
+        instructionArray.push(tipIx);
+        console.log(`💡 Added Jito tip instruction (${tipLamports} lamports, ${tipStart} SOL)`);
+      }
+
+      // Step 6: Serialize instructions for transmission
       const serializedInstructions = instructionArray.map(ix => ({
         programId: ix.programId.toBase58(),
         keys: ix.keys.map(key => ({
@@ -690,6 +738,7 @@ class WalletWSSServer {
           solAmount: solAmountLamports.toString(),
           slippage,
           protocol,
+          useJito,
           accounts: {
             mint: mintPubKey.toBase58(),
             user: userPubKey.toBase58(),
@@ -700,14 +749,15 @@ class WalletWSSServer {
 
       // Now send sign request to connected wallet client
       console.log('📝 Sending sign request to wallet client...');
-      await this.sendSignRequestToWallet(message.userId, {
+      await this.sendSignRequestToWallet(client.userId, {
         instructions: serializedInstructions,
         tokenAmount: tokenAmount.toString(),
         solAmount: solAmountLamports.toString(),
         mintAddress: mintPubKey.toBase58(),
         userAddress: userPubKey.toBase58(),
         walletId: walletId, // Pass the wallet ID for signing
-        requestId: message.requestId
+        requestId: message.requestId,
+        useJito: useJito // Pass Jito flag to final submission
       });
 
     } catch (error) {
@@ -810,8 +860,8 @@ class WalletWSSServer {
   async handleBuildPumpSell(client, message) {
     console.log(`📥 Build Pump V1 Sell request from ${client.id}:`, message);
 
-    // Verify the client is authenticated and matches the requested user
-    if (!client.authenticated || client.userId !== parseInt(message.userId)) {
+    // Verify the client is authenticated
+    if (!client.authenticated) {
       console.log(`❌ Unauthorized build pump sell request from ${client.id}`);
       client.ws.send(JSON.stringify({
         type: 'build_pump_sell_response',
@@ -823,14 +873,14 @@ class WalletWSSServer {
     }
 
     try {
-      const { pairAddress, mintAddress, tokenAmount, walletPublicKey, walletId, slippage = 1, protocol = 'v1' } = message;
+      const { pairAddress, mintAddress, tokenAmount, walletPublicKey, walletId, slippage = 1, protocol = 'v1', useJito = false, jitoTipAmount } = message;
 
       // For Pump V1, we need mintAddress, tokenAmount, walletPublicKey, walletId
       if (!mintAddress || !tokenAmount || !walletPublicKey || !walletId) {
         throw new Error('Missing required parameters: mintAddress, tokenAmount, walletPublicKey, walletId');
       }
 
-      console.log(`🔄 Building Pump ${protocol.toUpperCase()} sell instructions for ${mintAddress}, amount: ${tokenAmount} tokens`);
+      console.log(`🔄 Building Pump ${protocol.toUpperCase()} sell instructions for ${mintAddress}, amount: ${tokenAmount} tokens (Jito: ${useJito})`);
 
       // Convert token amount to smallest unit (assuming 6 decimals for Pump tokens)
       const decimals = 6;
@@ -841,7 +891,7 @@ class WalletWSSServer {
       const mintPubKey = new PublicKey(mintAddress);
       const userPubKey = new PublicKey(walletPublicKey);
 
-      console.log(`🪙 Token Amount: ${tokenAmountSmallestUnit} smallest units (${parseFloat(tokenAmount).toLocaleString()} tokens with ${decimals} decimals)`);
+      console.log(`🪙 Token Amount: ${tokenAmountSmallestUnit} smallest units (${parseFloat(tokenAmount).toLocaleString()} tokens)`);
       console.log(`🪙 Mint: ${mintPubKey.toBase58()}`);
       console.log(`👤 User: ${userPubKey.toBase58()}`);
       console.log(`🎯 Protocol: ${protocol.toUpperCase()}`);
@@ -852,23 +902,23 @@ class WalletWSSServer {
       let global, bondingCurveAccountInfo, bondingCurve, tokenProgramId, instructions, expectedSolReceive, instructionArray, solAmountLamports, solAmount;
 
       if (protocol === 'v1') {
-        // For Pump V1 sell: fetch sell state (checks if user has tokens)
+        // ... (V1 logic remains same)
         console.log('🔍 Using Pump V1 sell state (checks token balance)');
 
-        // Step 1a: Fetch global state first (required for calculations)
-        console.log('🌍 Fetching global state...');
+        // Step 1a: Fetch global state first
         global = await this.onlinePumpSdk.fetchGlobal();
         if (!global) {
           throw new Error('Failed to fetch Pump global state');
         }
-        console.log('✅ Global state fetched');
-        // Get token program from the mint address
+
+        // Get token program
         const mintInfo = await this.solanaConnection.getAccountInfo(mintPubKey);
         if (!mintInfo) {
           throw new Error('Failed to fetch mint account info');
         }
         tokenProgramId = mintInfo.owner;
-        // Step 1b: Fetch sell state for the specific token and user
+
+        // Step 1b: Fetch sell state
         const sellState = await this.onlinePumpSdk.fetchSellState(mintPubKey, userPubKey, tokenProgramId);
         if (!sellState) {
           throw new Error('Failed to fetch Pump V1 sell state - user may not have tokens');
@@ -877,12 +927,7 @@ class WalletWSSServer {
         bondingCurveAccountInfo = sellState.bondingCurveAccountInfo;
         bondingCurve = sellState.bondingCurve;
 
-        console.log('✅ Pump V1 sell state fetched, user has tokens!');
-
-        console.log('✅ Token program fetched:', tokenProgramId.toBase58());
-
-        // Step 1c: Calculate SOL amount from token amount
-        console.log('🔄 Step 1c: Calculating SOL amount...');
+        // Step 1c: Calculate SOL amount
         const { getSellSolAmountFromTokenAmount } = require('./PumpSDK/index.js');
         solAmount = getSellSolAmountFromTokenAmount({
           global,
@@ -892,22 +937,10 @@ class WalletWSSServer {
           amount: tokenAmountBN,
         });
 
-        console.log(`💰 SOL Amount calculation result: ${solAmount.div(new BN(10 ** 9)).toString()}.${solAmount.mod(new BN(10 ** 9)).toString().padStart(9, '0')} SOL`);
+        solAmountLamports = solAmount.toNumber();
 
-        // Step 2: Build V1 sell transaction instructions
+        // Step 2: Build V1 sell instructions
         console.log('🔄 Step 2: Building V1 sell instructions...');
-        console.log('📋 Parameters:', {
-          global: global ? 'exists' : 'null',
-          bondingCurveAccountInfo: bondingCurveAccountInfo ? 'exists' : 'null',
-          bondingCurve: bondingCurve ? 'exists' : 'null',
-          mint: mintPubKey.toBase58(),
-          user: userPubKey.toBase58(),
-          amount: tokenAmountBN.toString(),
-          solAmount: solAmount.toString(),
-          slippage,
-          tokenProgram: tokenProgramId
-        });
-
         instructions = await this.offlinePumpSdk.sellInstructions({
           global,
           bondingCurveAccountInfo,
@@ -920,48 +953,16 @@ class WalletWSSServer {
           tokenProgram: tokenProgramId
         });
 
-        console.log(`✅ Built ${instructions.length} V1 sell instructions`);
         instructionArray = Array.isArray(instructions) ? instructions : [instructions];
 
       } else if (protocol === 'amm' && pairAddress) {
-        // For Pump AMM sell: use pair address as pool key
-        console.log('🔍 Using Pump AMM sell with pool address');
-
-        // Step 1a: Get AMM pool state
-        console.log('🌍 Fetching AMM pool state for sell...');
+        // ... (AMM logic remains same)
         const poolKey = new PublicKey(pairAddress);
         const swapSolanaState = await this.onlinePumpAmmSdk.swapSolanaState(poolKey, userPubKey);
-        console.log('✅ AMM pool state retrieved for sell');
 
         const { globalConfig, pool, poolBaseAmount, poolQuoteAmount } = swapSolanaState;
 
-        console.log('📊 AMM Pool Information for sell:');
-        console.log(`- Base Reserve: ${poolBaseAmount.toString()} (raw)`);
-        console.log(`- Base Reserve: ${(poolBaseAmount.toNumber() / 1_000_000).toLocaleString()} tokens (6 decimals)`);
-
-        // Step 1b: For AMM sell, we already have the token amount to sell
-        // No additional calculation needed - we use the provided tokenAmountBN
-
-        console.log(`🧮 Selling token amount: ${tokenAmountBN.toString()} (raw)`);
-        console.log(`🧮 Selling token amount: ${(tokenAmountBN.toNumber() / 1_000_000).toLocaleString()} tokens (6 decimals)`);
-
-        // Step 2: Build AMM sell instructions
-        console.log('🔄 Step 2: Building AMM sell instructions...');
-
-        const instructions = await this.offlinePumpAmmSdk.sellBaseInput(swapSolanaState, tokenAmountBN, slippage);
-
-        if (!instructions) {
-          throw new Error('Failed to build AMM sell instructions - SDK returned undefined');
-        }
-
-        console.log(`✅ Built AMM sell instructions (type: ${typeof instructions})`);
-
-        // Handle both single instruction and array of instructions
-        instructionArray = Array.isArray(instructions) ? instructions : [instructions];
-        console.log(`✅ Instruction count: ${instructionArray.length}`);
-
-        // For AMM sell, calculate expected SOL receive amount
-        // Using AMM constant product formula with fee
+        // Calculate expected SOL receive (for fee calculation)
         const feeNumerator = new BN(997); // 0.3% fee
         const feeDenominator = new BN(1000);
 
@@ -970,23 +971,57 @@ class WalletWSSServer {
         const denominator = poolBaseAmount.add(tokenAmountWithFee);
 
         expectedSolReceive = numerator.div(denominator);
+        solAmountLamports = expectedSolReceive.toNumber();
 
-        console.log(`💰 Expected SOL receive: ${expectedSolReceive.div(new BN(10 ** 9)).toString()}.${expectedSolReceive.mod(new BN(10 ** 9)).toString().padStart(9, '0')} SOL`);
+        // Step 2: Build AMM sell instructions
+        console.log('🔄 Step 2: Building AMM sell instructions...');
+        instructions = await this.offlinePumpAmmSdk.sellBaseInput(swapSolanaState, tokenAmountBN, slippage);
+        if (!instructions) {
+          throw new Error('Failed to build AMM sell instructions');
+        }
 
-        // Set variables for response (mimicking V1 structure)
-        global = globalConfig;
-        bondingCurveAccountInfo = null; // Not used in AMM
-        bondingCurve = null; // Not used in AMM
-        tokenProgramId = pool.tokenProgram; // From pool data
-        solAmountLamports = expectedSolReceive.toNumber(); // Expected SOL receive
+        instructionArray = Array.isArray(instructions) ? instructions : [instructions];
+        tokenProgramId = pool.tokenProgram;
+        solAmount = expectedSolReceive;
       } else {
         throw new Error('Invalid protocol or missing pairAddress for AMM');
       }
 
-      // Calculations and logging are handled in the protocol conditional above
-      // No additional processing needed here
+      // Calculate Trading Fee (on estimated SOL proceeds)
+      const feeRate = client.userTier === 'pro' ? TRADING_FEES.pro : TRADING_FEES.basic;
+      const feeLamports = Math.floor(solAmountLamports * feeRate);
+      console.log(`💸 Trading Fee (${client.userTier}): ${feeLamports} lamports (${(feeLamports / 10 ** 9).toFixed(6)} SOL)`);
 
-      // Step 4: Serialize instructions for transmission
+      // Step 3: Add Trading Fee Instruction
+      if (feeLamports > 0) {
+        const feeIx = SystemProgram.transfer({
+          fromPubkey: userPubKey,
+          toPubkey: new PublicKey(FEE_RECIPIENT),
+          lamports: feeLamports
+        });
+        instructionArray.push(feeIx);
+        console.log(`💸 Added trading fee instruction (${feeLamports} lamports)`);
+      }
+
+      // Step 4: Add Jito Tip Instruction
+      if (useJito) {
+        // Use server's polled tip or default to 0.001 SOL (fallback)
+        const currentTip = this.jitoTipPoller ? this.jitoTipPoller.tipFloor : 0;
+        const tipStart = currentTip > 0 ? currentTip : 0.001;
+
+        const tipLamports = Math.floor(tipStart * LAMPORTS_PER_SOL);
+
+        const jitoTipAccount = new PublicKey(JITO_TIP_ADDRESS);
+        const tipIx = SystemProgram.transfer({
+          fromPubkey: userPubKey,
+          toPubkey: jitoTipAccount,
+          lamports: tipLamports
+        });
+        instructionArray.push(tipIx);
+        console.log(`💡 Added Jito tip instruction (${tipLamports} lamports, ${tipStart} SOL)`);
+      }
+
+      // Step 5: Serialize instructions
       const serializedInstructions = instructionArray.map(ix => ({
         programId: ix.programId.toBase58(),
         keys: ix.keys.map(key => ({
@@ -999,7 +1034,7 @@ class WalletWSSServer {
 
       console.log('📤 Sending sell response to terminal client...');
 
-      // Send success response with instructions to terminal client
+      // Send success response
       client.ws.send(JSON.stringify({
         type: 'build_pump_sell_response',
         requestId: message.requestId,
@@ -1007,9 +1042,10 @@ class WalletWSSServer {
         data: {
           instructions: serializedInstructions,
           tokenAmount: tokenAmountSmallestUnit.toString(),
-          solAmount: protocol === 'amm' ? expectedSolReceive.toString() : solAmount.toString(),
+          solAmount: solAmount.toString(),
           slippage,
           protocol,
+          useJito,
           accounts: {
             mint: mintPubKey.toBase58(),
             user: userPubKey.toBase58(),
@@ -1018,16 +1054,17 @@ class WalletWSSServer {
         }
       }));
 
-      // Now send sign request to connected wallet client
+      // Send sign request
       console.log('📝 Sending sign request to wallet client...');
-      await this.sendSignRequestToWallet(message.userId, {
+      await this.sendSignRequestToWallet(client.userId, {
         instructions: serializedInstructions,
         tokenAmount: tokenAmountSmallestUnit.toString(),
-        solAmount: protocol === 'amm' ? expectedSolReceive.toString() : solAmount.toString(),
+        solAmount: solAmount.toString(),
         mintAddress: mintPubKey.toBase58(),
         userAddress: userPubKey.toBase58(),
-        walletId: walletId, // Pass the wallet ID for signing
-        requestId: message.requestId
+        walletId: walletId,
+        requestId: message.requestId,
+        useJito: useJito
       });
 
     } catch (error) {
@@ -1077,22 +1114,54 @@ class WalletWSSServer {
 
   async sendSignedTransaction(pendingRequest, signature) {
     try {
-      console.log('🚀 Sending signed transaction to Solana...');
-
       const { originalTransaction, transactionData } = pendingRequest;
+      const useJito = transactionData.useJito || false;
+
+      console.log(`🚀 ${useJito ? 'Sending JITO transaction' : 'Sending standard transaction'} to Solana...`);
 
       // Add the signature from wallet client to the transaction
-      const { PublicKey } = require('@solana/web3.js');
       const signatureBuffer = Buffer.from(signature, 'base64');
       originalTransaction.addSignature(new PublicKey(transactionData.userAddress), signatureBuffer);
 
-      console.log('📡 Sending transaction to network...');
-      const txSignature = await this.solanaConnection.sendRawTransaction(originalTransaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3
-      });
+      let txSignature;
 
-      console.log(`✅ Transaction sent! Signature: ${txSignature}`);
+      if (useJito) {
+        console.log('📡 Submitting via Jito (Spam Strategy)...');
+        const serializedTx = originalTransaction.serialize();
+        const txBase58 = bs58.default.encode(serializedTx);
+
+        // Prepare Jito payload for sendTransaction
+        const jitoPayload = [
+          txBase58,
+          { "encoding": "base58" }
+        ];
+
+        // Spam across all endpoints
+        const sendPromises = JITO_ENDPOINTS.map(endpoint =>
+          this.sendJitoTransaction(jitoPayload, endpoint)
+            .then(id => ({ success: true, id, endpoint }))
+            .catch(err => ({ success: false, error: err.message, endpoint }))
+        );
+
+        const results = await Promise.all(sendPromises);
+        const successes = results.filter(r => r.success);
+
+        if (successes.length > 0) {
+          txSignature = successes[0].id;
+          console.log(`✅ Jito Transaction Submitted! ID: ${txSignature} (Success rate: ${successes.length}/${JITO_ENDPOINTS.length})`);
+        } else {
+          // If all Jito attempts failed, fallback or error out
+          console.error('❌ All Jito submission attempts failed:', results.map(r => r.error));
+          throw new Error('All Jito submission attempts failed');
+        }
+      } else {
+        console.log('📡 Sending transaction to network...');
+        txSignature = await this.solanaConnection.sendRawTransaction(originalTransaction.serialize(), {
+          skipPreflight: false,
+          maxRetries: 3
+        });
+        console.log(`✅ Standard Transaction sent! Signature: ${txSignature}`);
+      }
 
       // Notify terminal client about success
       const userConnections = this.userConnections.get(pendingRequest.userId);
@@ -1100,7 +1169,7 @@ class WalletWSSServer {
         userConnections.terminal.ws.send(JSON.stringify({
           type: 'transaction_sent',
           txSignature,
-          description: `Buy ${transactionData.tokenAmount} tokens for ${transactionData.solAmount} SOL`
+          description: `Trade ${transactionData.tokenAmount} tokens for ${transactionData.solAmount} SOL ${useJito ? '(via Jito)' : ''}`
         }));
       }
 
@@ -1123,8 +1192,8 @@ class WalletWSSServer {
     //console.log(`🔍 Token is SOL: ${request.currentCoin === 'So11111111111111111111111111111112'}`);
     //console.log(`🔍 Token length: ${request.currentCoin?.length} (should be 44 for valid mint)`);
 
-    // Verify the client is authenticated and matches the requested user
-    if (!client.authenticated || client.userId !== parseInt(request.userId)) {
+    // Verify the client is authenticated
+    if (!client.authenticated) {
       console.log(`❌ Unauthorized wallet data request from ${client.id}`);
       client.ws.send(JSON.stringify({
         type: 'wallet_data_response',
@@ -1160,7 +1229,15 @@ class WalletWSSServer {
     }
 
     // Get wallets from stored user wallet data
-    const userWallets = this.userWallets.get(client.userId) || [];
+    // Only return wallets if the wallet client is actually connected
+    const userConnections = this.userConnections.get(client.userId);
+    const isWalletConnected = !!(userConnections && userConnections.wallet && userConnections.wallet.ws && userConnections.wallet.ws.readyState === 1);
+
+    const userWallets = isWalletConnected ? (this.userWallets.get(client.userId) || []) : [];
+
+    if (!isWalletConnected) {
+      console.log(`⚠️ Returning empty wallet list for user ${client.userId} (wallet client disconnected)`);
+    }
 
     if (userWallets.length === 0) {
       // No wallets registered yet
@@ -1168,6 +1245,7 @@ class WalletWSSServer {
         type: 'wallet_data_response',
         requestId: request.requestId,
         success: true,
+        isWalletConnected,
         wallets: []
       }));
       return;
@@ -1194,26 +1272,44 @@ class WalletWSSServer {
     }
 
     try {
-      // Store wallet list for this user
-      this.userWallets.set(client.userId, message.wallets);
+      // Enforce tier-based wallet limits
+      const limit = client.userTier === 'pro' ? WALLET_LIMITS.pro : WALLET_LIMITS.basic;
+      const limitedWalletsData = message.wallets.slice(0, limit);
 
-      // Fetch balance information for each wallet
-      const enrichedWallets = await this.enrichWalletsWithBalances(message.wallets);
+      if (message.wallets.length > limit) {
+        console.log(`⚠️ User ${client.userId} (${client.userTier}) exceeded wallet limit of ${limit}. Incoming: ${message.wallets.length}. Sliced to ${limitedWalletsData.length}.`);
+      }
+
+      // Store initial limited wallet list
+      this.userWallets.set(client.userId, limitedWalletsData);
+
+      // Fetch balance information for each wallet (only for the limited set)
+      const enrichedWallets = await this.enrichWalletsWithBalances(limitedWalletsData);
 
       // Update stored wallets with balance info
       this.userWallets.set(client.userId, enrichedWallets);
 
-      console.log(`✅ Stored ${enrichedWallets.length} wallets for user ${client.userId}`);
+      console.log(`✅ Stored ${enrichedWallets.length} limited wallets for user ${client.userId}`);
 
-      // Send confirmation back to client
+      // Send confirmation back to wallet client
       client.ws.send(JSON.stringify({
         type: 'wallet_list_ack',
         walletCount: enrichedWallets.length,
         timestamp: Date.now()
       }));
 
-      // Check if we should start polling (if both clients are connected)
+      // Notify terminal client about the wallet update
       const userConnections = this.userConnections.get(client.userId);
+      if (userConnections && userConnections.terminal && userConnections.terminal.ws && userConnections.terminal.ws.readyState === 1) {
+        userConnections.terminal.ws.send(JSON.stringify({
+          type: 'wallet_update',
+          wallets: enrichedWallets,
+          timestamp: Date.now()
+        }));
+        console.log(`📤 Notified terminal client ${userConnections.terminal.id} about ${enrichedWallets.length} wallets`);
+      }
+
+      // Check if we should start polling (if both clients are connected)
       if (userConnections && userConnections.terminal && userConnections.wallet) {
         const walletPubKeys = enrichedWallets.map(wallet => wallet.publicKey);
         if (walletPubKeys.length > 0) {
@@ -1372,6 +1468,20 @@ class WalletWSSServer {
   }
 
   // Token Program Detection Utility
+  broadcastJitoTip(tip) {
+    //console.log(`📤 Broadcasting Jito tip update: ${tip} SOL`);
+
+    this.userConnections.forEach((connections, userId) => {
+      if (connections.terminal && connections.terminal.ws && connections.terminal.ws.readyState === WebSocket.OPEN) {
+        connections.terminal.ws.send(JSON.stringify({
+          type: 'jito_tip_update',
+          jitoTip: tip,
+          timestamp: Date.now()
+        }));
+      }
+    });
+  }
+
   async detectTokenProgram(mintAddress) {
     try {
       const mintPubKey = new PublicKey(mintAddress);
@@ -1414,8 +1524,8 @@ class WalletWSSServer {
   async handleNukeRequest(client, message) {
     console.log(`☢️ Nuke request from ${client.id}:`, message);
 
-    // Verify the client is authenticated and matches the requested user
-    if (!client.authenticated || client.userId !== parseInt(message.userId)) {
+    // Verify the client is authenticated
+    if (!client.authenticated) {
       console.log(`❌ Unauthorized nuke request from ${client.id}`);
       client.ws.send(JSON.stringify({
         type: 'nuke_response',
@@ -1428,7 +1538,7 @@ class WalletWSSServer {
 
     try {
       const { currentCoin, mintAddress, protocol, pairAddress, slippage, requestId } = message;
-      const userId = parseInt(message.userId);
+      const userId = client.userId;
       const mint = mintAddress || currentCoin; // Support both field names
 
       console.log(`☢️ NUKE Request:`);
@@ -1512,8 +1622,6 @@ class WalletWSSServer {
       bundleData.pairAddress = pairAddress;
       bundleData.mintAddress = mint;
       bundleData.slippage = slippage || 5;
-      bundleData.userId = userId;
-
       // Send to wallet client for signing
       await this.sendBundleSignRequest(userId, bundleData, requestId);
 
@@ -1532,7 +1640,8 @@ class WalletWSSServer {
     console.log('📦 Processing Bundle Buy Request...');
 
     try {
-      const { userId, mintAddress, wallets, slippage = 5, useJito, protocol = 'v1', pairAddress } = message;
+      const { mintAddress, wallets, slippage = 5, useJito, protocol = 'v1', pairAddress } = message;
+      const userId = client.userId;
 
       if (!wallets || wallets.length === 0) {
         throw new Error('No wallets specified for bundle buy');
@@ -1547,7 +1656,7 @@ class WalletWSSServer {
 
       // Fetch initial state
       const firstWalletId = wallets[0].walletId;
-      const userWallets = this.userWallets.get(parseInt(userId)) || [];
+      const userWallets = this.userWallets.get(userId) || [];
       const firstWallet = userWallets.find(w => w.id === firstWalletId);
 
       if (!firstWallet) {
@@ -1607,6 +1716,11 @@ class WalletWSSServer {
         // Convert SOL to lamports (BN)
         const lamports = Math.floor(parseFloat(solAmountStr) * 1_000_000_000);
         const solAmountBN = new BN(lamports.toString());
+
+        // Calculate Trading Fee
+        const feeRate = client.userTier === 'pro' ? TRADING_FEES.pro : TRADING_FEES.basic;
+        const feeLamports = Math.floor(lamports * feeRate);
+        console.log(`      💸 Trading Fee (${client.userTier}): ${feeLamports} lamports (${(feeLamports / 10 ** 9).toFixed(6)} SOL)`);
 
         let tokenAmount, instructions;
 
@@ -1688,22 +1802,40 @@ class WalletWSSServer {
 
         const instructionArray = Array.isArray(instructions) ? instructions : [instructions];
 
+        // 4. Add Fee Transfer Instruction
+        if (feeLamports > 0) {
+          const feeIx = SystemProgram.transfer({
+            fromPubkey: walletPubKey,
+            toPubkey: new PublicKey(FEE_RECIPIENT),
+            lamports: feeLamports
+          });
+          instructionArray.push(feeIx);
+          console.log(`      💸 Added trading fee to tx ${i + 1}`);
+        }
+
+        // 5. Add Jito Tip to LAST transaction
+        // 5. Add Jito Tip to LAST transaction
+        if (i === wallets.length - 1 && useJito) {
+          // Use server's polled tip or default to 0.001 SOL (fallback)
+          const currentTip = this.jitoTipPoller ? this.jitoTipPoller.tipFloor : 0;
+          const tipStart = currentTip > 0 ? currentTip : 0.001;
+
+          const tipLamports = Math.floor(tipStart * LAMPORTS_PER_SOL);
+
+          const jitoTipAccount = new PublicKey(JITO_TIP_ADDRESS);
+          const tipIx = SystemProgram.transfer({
+            fromPubkey: walletPubKey,
+            toPubkey: jitoTipAccount,
+            lamports: tipLamports
+          });
+          instructionArray.push(tipIx);
+          console.log(`      💡 Added Jito tip to final tx (${tipLamports} lamports, ${tipStart} SOL)`);
+        }
+
         const transaction = new Transaction();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = walletPubKey;
         transaction.add(...instructionArray);
-
-        // 4. Add Jito Tip to LAST transaction
-        if (i === wallets.length - 1 && useJito) {
-          const jitoTipAccount = new PublicKey('96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5');
-          const tipIx = SystemProgram.transfer({
-            fromPubkey: walletPubKey,
-            toPubkey: jitoTipAccount,
-            lamports: this.JITO_TIP_AMOUNT
-          });
-          transaction.add(tipIx);
-          console.log(`      💡 Added Jito tip to final tx`);
-        }
 
         // Serialize
         const serialized = transaction.serialize({
@@ -1730,7 +1862,7 @@ class WalletWSSServer {
 
       // Use the standard bundle sign request flow, passing 'bundle_buy' type
       await this.sendBundleSignRequest(
-        parseInt(userId),
+        userId,
         bundleData,
         message.requestId,
         0, // bundleIndex
@@ -1822,7 +1954,8 @@ class WalletWSSServer {
     console.log('📦 Processing Gather SOL Request...');
 
     try {
-      const { userId, wallets, receiver } = message; // wallets is array of strings (Ids), receiver is string (Id)
+      const userId = client.userId;
+      const { wallets, receiver } = message; // wallets is array of strings (Ids), receiver is string (Id)
 
       if (!wallets || wallets.length === 0) throw new Error('No wallets specified');
       if (!receiver) throw new Error('No receiver specified');
@@ -1830,7 +1963,7 @@ class WalletWSSServer {
       console.log(`   - Wallets: ${wallets.length}`);
       console.log(`   - Receiver: ${receiver}`);
 
-      const userWallets = this.userWallets.get(parseInt(userId)) || [];
+      const userWallets = this.userWallets.get(client.userId) || [];
       const receiverWallet = userWallets.find(w => w.id === receiver);
       if (!receiverWallet) throw new Error('Receiver wallet not found');
 
@@ -1927,7 +2060,7 @@ class WalletWSSServer {
         });
 
         if (addTip && signers.length > 0) { // Only add tip if tx is valid
-          const jitoTipAccount = new PublicKey('96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5');
+          const jitoTipAccount = new PublicKey(JITO_TIP_ADDRESS);
           transaction.add(SystemProgram.transfer({
             fromPubkey: feePayerPubKey,
             toPubkey: jitoTipAccount,
@@ -2008,11 +2141,12 @@ class WalletWSSServer {
   }
 
   async handleDistributeSolRequest(client, message) {
-    const { userId, requestId, senderId, recipients } = message;
+    const { requestId, senderId, recipients } = message;
+    const userId = client.userId;
     console.log(`🚀 [MAGIC] Starting Distribution request ${requestId} for user ${userId}...`);
 
     try {
-      const userWallets = this.userWallets.get(parseInt(userId)) || [];
+      const userWallets = this.userWallets.get(userId) || [];
       const senderWallet = userWallets.find(w => w.id === senderId);
       if (!senderWallet) throw new Error('Sender wallet not found');
 
@@ -2049,11 +2183,11 @@ class WalletWSSServer {
             requestId,
             recipient: recipientPubKey.toBase58(),
             keys: {
-              rentFunder: bs58.encode(rentFunder.secretKey),
-              banker: bs58.encode(banker.secretKey),
-              firstCourier: bs58.encode(firstCourier.secretKey),
-              proxy: bs58.encode(proxy.secretKey),
-              lastCourier: bs58.encode(lastCourier.secretKey)
+              rentFunder: bs58.default.encode(rentFunder.secretKey),
+              banker: bs58.default.encode(banker.secretKey),
+              firstCourier: bs58.default.encode(firstCourier.secretKey),
+              proxy: bs58.default.encode(proxy.secretKey),
+              lastCourier: bs58.default.encode(lastCourier.secretKey)
             }
           };
           fs.appendFileSync('server/logs/magic_transfer_keys_detailed.log', JSON.stringify(logEntry) + '\n');
@@ -2079,7 +2213,7 @@ class WalletWSSServer {
             }]]
           };
 
-          const signedFundingTxs = await this.awaitClientSignature(parseInt(userId), fundingBundle, `${requestId}_fund_${idx}`, 0, 'dist_fund');
+          const signedFundingTxs = await this.awaitClientSignature(client.userId, fundingBundle, `${requestId}_fund_${idx}`, 0, 'dist_fund');
 
           // Submit and confirm funding
           const fundingSig = await this.solanaConnection.sendRawTransaction(Buffer.from(signedFundingTxs[0], 'base64'), { skipPreflight: true });
@@ -2151,14 +2285,14 @@ class WalletWSSServer {
             }]]
           };
 
-          const signedMagicTxs = await this.awaitClientSignature(parseInt(userId), magicBundle, `${requestId}_magic_${idx}`, 0, 'dist_magic');
+          const signedMagicTxs = await this.awaitClientSignature(userId, magicBundle, `${requestId}_magic_${idx}`, 0, 'dist_magic');
 
           const magicSig = await this.solanaConnection.sendRawTransaction(Buffer.from(signedMagicTxs[0], 'base64'), { skipPreflight: true });
           console.log(`   ✅ Magic Chain Submitted: ${magicSig}. Waiting confirmation...`);
           await this.solanaConnection.confirmTransaction(magicSig, 'confirmed');
 
           // Notify UI of success for this recipient
-          const userConnections = this.userConnections.get(parseInt(userId));
+          const userConnections = this.userConnections.get(userId);
           if (userConnections?.terminal) {
             userConnections.terminal.ws.send(JSON.stringify({
               type: 'distribute_sol_update',
@@ -2171,7 +2305,7 @@ class WalletWSSServer {
 
         } catch (err) {
           console.error(`❌ Failed to process recipient ${recipient.walletId}:`, err);
-          const userConnections = this.userConnections.get(parseInt(userId));
+          const userConnections = this.userConnections.get(userId);
           if (userConnections?.terminal) {
             userConnections.terminal.ws.send(JSON.stringify({
               type: 'distribute_sol_update',
@@ -2186,7 +2320,7 @@ class WalletWSSServer {
       }
 
       console.log(`🎉 Distribution ${requestId} completed!`);
-      const userConnections = this.userConnections.get(parseInt(userId));
+      const userConnections = this.userConnections.get(userId);
       if (userConnections?.terminal) {
         userConnections.terminal.ws.send(JSON.stringify({
           type: 'distribute_sol_response',
@@ -2279,19 +2413,21 @@ class WalletWSSServer {
         const isLastTransactionInBundle = (j + this.WALLETS_PER_TRANSACTION) >= bundleWallets.length;
 
         if (isLastTransactionInBundle) {
-          // Add Jito Tip 
-          // const jitoTipAccount = new PublicKey('DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL'); // Legacy
-          // Use a randomized tip account logic if available, or static for now
-          const jitoTipAccount = new PublicKey('96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5'); // Common Jito Tip Account
+          // Add Jito Tip - Use server's polled tip or fallback
+          const currentTip = this.jitoTipPoller ? this.jitoTipPoller.tipFloor : 0;
+          const tipStart = currentTip > 0 ? currentTip : 0.001;
+          const tipLamports = Math.floor(tipStart * LAMPORTS_PER_SOL);
+
+          const jitoTipAccount = new PublicKey(JITO_TIP_ADDRESS); // Common Jito Tip Account
 
           const tipIx = SystemProgram.transfer({
             fromPubkey: tipPayerPubKey, // Tip comes from Tip Payer
             toPubkey: jitoTipAccount,
-            lamports: this.JITO_TIP_AMOUNT
+            lamports: tipLamports
           });
 
           transaction.add(tipIx);
-          console.log(`💡 Added Jito tip from ${tipPayerWallet.wallet.publicKey} (Bundle Fee Payer)`);
+          console.log(`💡 Added Jito tip (${tipLamports} lamports) from ${tipPayerWallet.wallet.publicKey}`);
         }
 
         // Serialize
@@ -2462,7 +2598,7 @@ class WalletWSSServer {
       const signedTransactionsBase58 = allSignedTransactions.map(txBase64 => {
         try {
           // Some environments need .default, some don't. Try both or use a safe check.
-          const encoder = bs58.encode || (bs58.default && bs58.encode);
+          const encoder = bs58.encode || (bs58.default && bs58.default.encode);
           if (!encoder) throw new Error('bs58 encoder not found');
           return encoder(Buffer.from(txBase64, 'base64'));
         } catch (e) {
@@ -2762,6 +2898,41 @@ class WalletWSSServer {
     }
   }
 
+  async sendJitoTransaction(payload, endpointName) {
+    try {
+      const proxyBase = JITO_PROXY_URL.endsWith('/') ? JITO_PROXY_URL.slice(0, -1) : JITO_PROXY_URL;
+      const url = `${proxyBase}/api/v1/transactions/?endpoint=${endpointName}`;
+
+      const response = await axios.post(url, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "sendTransaction",
+        params: payload, // [tx_base58, {encoding: "base58"}]
+      }, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 5000 // 5s timeout
+      });
+
+      if (response.data.error) {
+        throw new Error(response.data.error.message);
+      }
+
+      return response.data.result; // Returns the Transaction ID
+    } catch (error) {
+      if (error.response) {
+        let msg = error.response.data?.error?.message || error.response.data || error.message;
+        if (typeof msg === 'object') {
+          msg = JSON.stringify(msg);
+        }
+        throw new Error(`Jito Transaction API Error: ${msg}`);
+      } else if (error.request) {
+        throw new Error(`Jito Proxy Timeout/Unreachable: ${error.message}`);
+      } else {
+        throw error;
+      }
+    }
+  }
+
   async sendJitoBundle(payload, endpointName) {
     try {
       //console.log("payload : ", payload);
@@ -2849,7 +3020,7 @@ class SolBalancePoller {
   // Monitor SOL balance changes for a specific user's wallets
   async startPollingForUser(userId, walletPubKeys, tokenInfo = null) {
     if (!walletPubKeys || walletPubKeys.length === 0) {
-      console.log(`⚠️ No wallets to poll for user ${userId}`);
+      //console.log(`⚠️ No wallets to poll for user ${userId}`);
       return;
     }
 
@@ -2976,17 +3147,16 @@ class SolBalancePoller {
     const splBalances = new Map();
 
     try {
-      // Use fixed 6 decimals as requested
+      // Use fixed 6 decimals as standard for these tokens
       const decimals = 6;
-      //console.log(`📏 Using fixed 6 decimals for token ${tokenInfo.mintAddress}`);
 
       // Get ATA addresses for all wallets
       const ataAddresses = walletPubKeys.map(walletPubKey => {
         const programId = tokenInfo.programType === 'TOKEN_2022' ?
-          require('@solana/spl-token').TOKEN_2022_PROGRAM_ID :
-          require('@solana/spl-token').TOKEN_PROGRAM_ID;
+          TOKEN_2022_PROGRAM_ID :
+          TOKEN_PROGRAM_ID;
 
-        return require('@solana/spl-token').getAssociatedTokenAddressSync(
+        return getAssociatedTokenAddressSync(
           new PublicKey(tokenInfo.mintAddress),
           new PublicKey(walletPubKey),
           false,
@@ -2995,11 +3165,17 @@ class SolBalancePoller {
         );
       });
 
-      //console.log(`🎫 Generated ${ataAddresses.length} ATA addresses for token ${tokenInfo.mintAddress}`);
+      // Targeted fetch for ATA account infos
+      let ataInfos = await this.solanaConnection.getMultipleAccountsInfo(ataAddresses);
 
-      // Batch fetch ATA account infos
-      const ataInfos = await this.solanaConnection.getMultipleAccountsInfo(ataAddresses);
-      //console.log(`📡 Got ${ataInfos.length} ATA account infos`);
+      // If we're missing accounts, try one more time after a short delay
+      // (Handles RPC indexing delays for newly created ATAs)
+      const missingCount = ataInfos.filter(info => !info).length;
+      if (missingCount > 0) {
+        //console.log(`🔍 ${missingCount} ATAs missing, retrying in 1s...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        ataInfos = await this.solanaConnection.getMultipleAccountsInfo(ataAddresses);
+      }
 
       // Parse token balances
       ataInfos.forEach((info, index) => {
@@ -3007,21 +3183,18 @@ class SolBalancePoller {
         let balance = 0;
 
         if (info && info.data) {
-          // Parse token account data
-          // For both Token Program and Token-2022, the balance is at the same offset
-          const balanceBytes = info.data.slice(64, 72); // Balance is 8 bytes starting at offset 64
-          const rawBalance = Number(balanceBytes.readBigUInt64LE());
-          balance = rawBalance / Math.pow(10, decimals);
-
-          //console.log(`🪙 ${walletPubKey.substring(0, 8)}...: ${balance} ${tokenInfo.mintAddress.substring(0, 8)}...`);
+          try {
+            // Parse token account data
+            // For both Token Program and Token-2022, the balance is at the same offset
+            const balanceBytes = info.data.slice(64, 72); // Balance is 8 bytes starting at offset 64
+            const rawBalance = Number(balanceBytes.readBigUInt64LE());
+            balance = rawBalance / Math.pow(10, decimals);
+          } catch (e) {
+            console.error(`❌ Error parsing token balance for ${walletPubKey}:`, e);
+          }
         }
 
         splBalances.set(walletPubKey, balance);
-      });
-
-      //console.log(`📊 SPL Balance Summary for ${tokenInfo.mintAddress}:`);
-      splBalances.forEach((balance, wallet) => {
-        //console.log(`   ${wallet}: ${balance}`);
       });
 
     } catch (error) {
@@ -3035,6 +3208,61 @@ class SolBalancePoller {
     this.onBalanceUpdate = callback;
   }
 }
+
+class JitoTipPoller {
+  constructor() {
+    this.tipFloor = 0;
+    this.callbacks = [];
+    this.isPolling = false;
+  }
+
+  start() {
+    if (this.isPolling) return;
+    this.isPolling = true;
+
+    // Initial poll
+    this.pollTip();
+
+    // Poll every 10 seconds
+    setInterval(() => this.pollTip(), 10000);
+  }
+
+  async pollTip() {
+    try {
+      const response = await axios.get('https://bundles.jito.wtf/api/v1/bundles/tip_floor');
+      // Response is an array of objects
+      if (response.data && response.data.length > 0) {
+        // Get the latest data point (usually the first one, but let's check structure if needed)
+        // API returns array of recent tip data. We'll take the first one (most recent).
+        const latestStats = response.data[0];
+
+        // We want the 99th percentile as requested
+        const newTip = latestStats.landed_tips_99th_percentile;
+
+        if (newTip && newTip !== this.tipFloor) {
+          this.tipFloor = newTip;
+          //console.log(`💡 Jito Tip Update: ${this.tipFloor} SOL`);
+          this.notifyCallbacks();
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to poll Jito tip floor:', error.message);
+    }
+  }
+
+  onUpdate(callback) {
+    this.callbacks.push(callback);
+  }
+
+  notifyCallbacks() {
+    this.callbacks.forEach(cb => cb(this.tipFloor));
+  }
+
+  getCurrentTip() {
+    return this.tipFloor;
+  }
+}
+
 
 // Start server
 if (require.main === module) {

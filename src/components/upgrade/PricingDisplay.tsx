@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import PaymentModal from "./PaymentModal";
 
 type OperatorProps = {
-  userId: number;
-  tier: string;
+  accountId: string;
+  userTier: string;
   is2faEnabled: boolean;
 };
 
@@ -13,40 +15,46 @@ type PricingDisplayProps = {
 };
 
 const PricingDisplay = ({ operator }: PricingDisplayProps) => {
-  const [discountEligible, setDiscountEligible] = useState(false);
+  const searchParams = useSearchParams();
+  const [pricing, setPricing] = useState<{
+    basePriceSol: number;
+    commissionPercent: number;
+    discountAmountSol: number;
+    netPriceSol: number;
+    hasDiscount: boolean;
+    referralCode?: string;
+  } | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   useEffect(() => {
-    const checkDiscountEligibility = async () => {
+    const fetchPricing = async () => {
       if (!operator) {
-        setDiscountEligible(false);
         setLoading(false);
         return;
       }
 
       try {
-        // Check if user has successful referrals or was referred
-        const res = await fetch("/api/referrals");
+        const referralCode = searchParams.get("ref") || undefined;
+        const query = referralCode ? `?referralCode=${referralCode}` : '';
+        const res = await fetch(`/api/upgrade/pricing${query}`);
         const data = await res.json();
 
         if (data.success) {
-          // User is eligible for discount if they have successful referrals OR were referred
-          const hasSuccessfulReferrals = data.successfulReferrals > 0;
-          const wasReferred = data.referrals.some((r: any) => r.status === 'completed' || r.status === 'paid');
-
-          setDiscountEligible(hasSuccessfulReferrals || wasReferred);
+          setPricing(data.pricing);
         }
       } catch (error) {
-        console.error("Failed to check discount eligibility:", error);
+        console.error("Failed to fetch pricing:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    checkDiscountEligibility();
-  }, [operator]);
+    fetchPricing();
+  }, [operator, searchParams]);
 
-  if (loading) {
+  if (loading || !pricing) {
     return (
       <div className="border border-green-500/40 p-4 space-y-3">
         <div className="animate-pulse">
@@ -57,26 +65,64 @@ const PricingDisplay = ({ operator }: PricingDisplayProps) => {
     );
   }
 
-  return (
-    <div className="border border-green-500/40 bg-black/50 p-4 space-y-3">
-      <h3 className="text-lg font-bold text-green-300 text-center">Pricing</h3>
+  const isPro = operator?.userTier === 'pro';
 
-      <div className="space-y-3 text-sm text-green-200">
-        <div className="flex justify-between text-base font-semibold">
-          <span className="text-green-300">Pro Price</span>
-          <span className="text-green-100">TBD</span>
-        </div>
-        <p className="text-xs text-green-400/80 leading-relaxed">
-          We&rsquo;re finalizing public beta pricing. Early supporters will receive preferred rates.
-          Connect with the Telegram bot to get notified when plans go live.
-        </p>
-        {discountEligible && (
-          <div className="text-[11px] text-green-300/70 border-t border-green-500/20 pt-2">
-            Referral perks will be honored when pricing is announced.
+  return (
+    <>
+      <div className="border border-green-500/40 bg-black/50 p-4 space-y-4">
+        <h3 className="text-lg font-bold text-green-300 text-center">
+          {isPro ? 'Pro Membership Active' : 'Upgrade to Pro'}
+        </h3>
+
+        {!isPro ? (
+          <div className="space-y-3 text-sm text-green-200">
+            <div className="flex justify-between items-center text-base">
+              <span className="text-gray-400">Base Price:</span>
+              <span>{pricing.basePriceSol} SOL</span>
+            </div>
+
+            {pricing.hasDiscount && (
+              <div className="flex justify-between items-center text-green-400">
+                <span>Referral Discount:</span>
+                <span>-{pricing.discountAmountSol} SOL</span>
+              </div>
+            )}
+
+            <div className="border-t border-green-500/20 pt-2 flex justify-between items-center font-bold text-lg">
+              <span className="text-white">Price:</span>
+              <span className="text-green-300">{pricing.netPriceSol} SOL</span>
+            </div>
+
+            <button
+              onClick={() => setShowPaymentModal(true)}
+              className="w-full bg-green-600 hover:bg-green-500 text-black font-bold py-2 rounded mt-2 transition-colors shadow-[0_0_15px_rgba(22,163,74,0.3)] hover:shadow-[0_0_20px_rgba(22,163,74,0.5)]"
+            >
+              Upgrade Now
+            </button>
+
+            <p className="text-[10px] text-center text-gray-500">
+              One-time payment for lifetime access
+            </p>
+          </div>
+        ) : (
+          <div className="text-center space-y-2">
+            <div className="text-green-400 text-sm">
+              You have full access to all Pro features.
+            </div>
           </div>
         )}
       </div>
-    </div>
+
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        pricing={pricing}
+        onSuccess={() => {
+          // Refresh page or update state to reflect Pro status
+          window.location.reload();
+        }}
+      />
+    </>
   );
 };
 

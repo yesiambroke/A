@@ -27,10 +27,11 @@ interface BundleBuyModalProps {
   onRestore?: () => void;
   mintAddress: string;
   wssConnection: WebSocket | null;
-  operator: any;
+  accountId?: string;
   slippage: string;
   protocolType: 'v1' | 'amm' | null;
   pairAddress?: string;
+  jitoTip: number | null;
 }
 
 const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
@@ -46,10 +47,11 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   onRestore,
   mintAddress,
   wssConnection,
-  operator,
+  accountId,
   slippage,
   protocolType,
-  pairAddress
+  pairAddress,
+  jitoTip
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -238,7 +240,6 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
         // Send actual batch trade request via WSS
         const batchRequest = {
           type: 'bundle_buy_request',
-          userId: operator?.userId?.toString() || 'unknown',
           requestId: `bundle_buy_${Date.now()}_${batchIndex}`,
           mintAddress: mintAddress,
           wallets: validBatch.map(walletId => ({
@@ -248,7 +249,9 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
           slippage: parseFloat(slippage) || 5,
           protocol: protocolType || 'v1',
           pairAddress,
-          useJito
+          useJito,
+          // @ts-ignore - Dynamic tip update
+          jitoTipAmount: jitoTip
         };
 
         console.log('📤 Sending Bundle Buy Request:', batchRequest);

@@ -10,8 +10,8 @@ const TradingPage = async ({
   const session = await getSessionFromCookies();
 
   const operator = session ? {
-    userId: session.userId,
-    tier: session.tier,
+    accountId: session.accountId,
+    userTier: session.tier,
     is2faEnabled: session.is2faEnabled,
   } : null;
 
@@ -28,7 +28,7 @@ const TradingPage = async ({
       </div>
 
       <div className="relative z-10 mx-auto w-full max-w-[98vw] sm:max-w-[97vw]">
-      <div className="border-2 border-green-500 bg-black shadow-2xl shadow-green-500/20 h-[calc(100vh-1rem)]">
+        <div className="border-2 border-green-500 bg-black shadow-2xl shadow-green-500/20 h-[calc(100vh-1rem)]">
           <TradingTerminal operator={operator} />
         </div>
       </div>

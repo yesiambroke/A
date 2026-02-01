@@ -21,7 +21,7 @@ interface DistributeSolModalProps {
   onMinimize?: () => void;
   onRestore?: () => void;
   wssConnection: WebSocket | null;
-  userId: string;
+  accountId?: string;
 }
 
 const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
@@ -34,7 +34,7 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
   onMinimize,
   onRestore,
   wssConnection,
-  userId
+  accountId
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -180,7 +180,6 @@ const DistributeSolModal: React.FC<DistributeSolModalProps> = ({
 
       const payload = {
         type: 'distribute_sol_request',
-        userId: userId,
         requestId: requestId,
         senderId: senderWalletId,
         recipients: recipients.map(id => ({

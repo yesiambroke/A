@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 
 export type FavoriteWidgetCoin = {
   id: string;
@@ -58,6 +59,7 @@ export function FavoritesWidget({
   onToggleFavorite,
   positionStorageKey = defaultStorageKey
 }: FavoritesWidgetProps) {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState<{ x: number; y: number } | null>(null);
   const dragState = React.useRef<{ dragging: boolean; offsetX: number; offsetY: number }>({
@@ -200,7 +202,7 @@ export function FavoritesWidget({
                     </div>
                     <button
                       className="px-2 py-1 text-[11px] font-mono border border-green-300/50 text-green-100 hover:border-green-200 hover:text-green-50"
-                      onClick={() => window.open(`/terminal?coin=${c.contractAddress}`, '_blank')}
+                      onClick={() => router.push(`/terminal?coin=${c.contractAddress}`)}
                     >
                       Open
                     </button>

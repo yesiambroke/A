@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
 
     // Get user's referral data
     const userQuery = `
-      SELECT referral_code, referral_balance, pro_purchased_at
+      SELECT referral_code, referral_balance, pro_purchased_at, commission_percent
       FROM users
       WHERE user_id = $1
     `;
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       referralBalance: parseFloat(user.referral_balance || 0),
       successfulReferrals: successfulCount,
       totalReferrals: referralsResult.rows.length,
+      commissionPercent: parseFloat(user.commission_percent || 20),
       referrals: referralsResult.rows,
       proPurchasedAt: user.pro_purchased_at
     });

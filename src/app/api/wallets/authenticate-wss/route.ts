@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       sessionId: session.sessionId,
-      userId: session.userId,
+      accountId: session.accountId,
       userTier: session.tier
     });
 

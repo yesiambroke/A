@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Log the transaction
-    await logReferralTransaction(session.userId, discountedPrice, 'purchase', txHash, `Pro upgrade${discountApplied ? ' with discount' : ''}`);
+    await logReferralTransaction(session.userId, discountedPrice, 'purchase', txHash, `Pro upgrade for #${session.accountId}${discountApplied ? ' with discount' : ''}`);
 
     return NextResponse.json({
       success: true,
@@ -87,7 +87,7 @@ async function completeReferral(referrerId: number, refereeId: number, txHash: s
     SET status = 'completed', completed_at = NOW(), purchase_tx_hash = $1
     WHERE referrer_id = $2 AND referee_id = $3 AND status = 'pending'
   `;
-    await query(updateReferralQuery, [txHash, referrerId, refereeId]);
+  await query(updateReferralQuery, [txHash, referrerId, refereeId]);
 
   // Credit reward to referrer
   const creditRewardQuery = `
@@ -98,7 +98,7 @@ async function completeReferral(referrerId: number, refereeId: number, txHash: s
   await query(creditRewardQuery, [referrerId]);
 
   // Log the reward transaction
-  await logReferralTransaction(referrerId, 1.5, 'reward', null, `Reward for referral to user ${refereeId}`);
+  await logReferralTransaction(referrerId, 1.5, 'reward', null, `Reward for referral`);
 }
 
 // Helper function to log referral transactions

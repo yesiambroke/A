@@ -47,17 +47,22 @@
 
 /* Hide scrollbar for auto-scrolling containers */
 .scrollbar-hide {
-  -ms-overflow-style: none;  /* Internet Explorer 10+ */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  /* Internet Explorer 10+ */
+  scrollbar-width: none;
+  /* Firefox */
 }
+
 .scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Safari and Chrome */
+  display: none;
+  /* Safari and Chrome */
 }
 
 @keyframes cardSpin {
   0% {
     transform: rotateY(0deg);
   }
+
   100% {
     transform: rotateY(360deg);
   }
@@ -67,6 +72,7 @@
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
@@ -88,10 +94,8 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(
-    rgba(2, 2, 2, 0) 50%,
-    rgba(2, 2, 2, 0.25) 50%
-  );
+  background-image: linear-gradient(rgba(2, 2, 2, 0) 50%,
+      rgba(2, 2, 2, 0.25) 50%);
   background-size: 100% 4px;
   opacity: 0.4;
   pointer-events: none;

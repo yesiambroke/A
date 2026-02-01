@@ -318,7 +318,7 @@ const WarmUpWalletModal: React.FC<WarmUpWalletModalProps> = ({
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-orange-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-orange-400">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="text-left">
@@ -328,7 +328,7 @@ const WarmUpWalletModal: React.FC<WarmUpWalletModalProps> = ({
               </div>
             </div>
             <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity">
-              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 14l5-5 5 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
         </button>
@@ -339,16 +339,16 @@ const WarmUpWalletModal: React.FC<WarmUpWalletModalProps> = ({
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]" onClick={handleBackdropClick}>
       <div className="bg-black/90 border border-orange-500/30 rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{
-             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(249, 115, 22, 0.3), 0 0 60px rgba(249, 115, 22, 0.2), 0 0 100px rgba(249, 115, 22, 0.1)',
-             filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
-           }}>
+        style={{
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(249, 115, 22, 0.3), 0 0 60px rgba(249, 115, 22, 0.2), 0 0 100px rgba(249, 115, 22, 0.1)',
+          filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.5))'
+        }}>
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-orange-500/20">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-orange-500/20 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-orange-400">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div className="flex items-baseline gap-2">
@@ -582,10 +582,10 @@ const WarmUpWalletModal: React.FC<WarmUpWalletModalProps> = ({
                       <span className="text-orange-300/80 font-mono text-xs">SOL</span>
                     </div>
                   )}
-                 </div>
-               </div>
+                </div>
+              </div>
 
-               {/* Options */}
+              {/* Options */}
               <div className="space-y-2">
                 <div className="pt-2 border-t border-orange-500/20">
                   <div className="flex items-center gap-3">
@@ -656,7 +656,7 @@ const WarmUpWalletModal: React.FC<WarmUpWalletModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-yellow-400 bg-yellow-500/20 text-yellow-100 hover:bg-yellow-500/30 transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 4h4v16H6V4zM14 4h4v16h-4V4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Pause
               </button>
@@ -671,8 +671,8 @@ const WarmUpWalletModal: React.FC<WarmUpWalletModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-orange-400 bg-orange-500/20 text-orange-100 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 6h18M3 10h14M3 14h10M3 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M21 12l-3 3 3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Resume ({selectedWallets.filter(id => !processedWarmUpWallets.includes(id)).length})
               </button>
@@ -685,7 +685,7 @@ const WarmUpWalletModal: React.FC<WarmUpWalletModalProps> = ({
                 className="flex-1 py-2 px-3 rounded-lg border border-orange-400 bg-orange-500/20 text-orange-100 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Start Warm Up Wallet
               </button>

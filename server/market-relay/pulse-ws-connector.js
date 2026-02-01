@@ -298,21 +298,21 @@ class PulseWSConnector {
           }
           this._callbacks.delta({ tokenKey, updates: mapped, rawUpdates: payload });
         }
-       } else {
-         // Handle JSON messages (e.g., snapshots)
-         if (decoded.opcode === 0 && this._callbacks.snapshot) {
-           this._callbacks.snapshot({ tokenKey: decoded.tokenKey, payload: null });
-         } else if (decoded.opcode === 1 && this._callbacks.delta) {
-           // Handle JSON deltas if any
-           this._callbacks.delta({ tokenKey: decoded.tokenKey, updates: decoded.updates || {}, rawUpdates: decoded.payload || [] });
-         } else {
-           // Log first few non-array messages for diagnostics
-           if (sampleCount < 3) {
-             sampleCount += 1;
-             this.logger.info(`🔍 Pulse message sample: ${JSON.stringify(decoded).substring(0, 500)}`);
-           }
-         }
-       }
+      } else {
+        // Handle JSON messages (e.g., snapshots)
+        if (decoded.opcode === 0 && this._callbacks.snapshot) {
+          this._callbacks.snapshot({ tokenKey: decoded.tokenKey, payload: null });
+        } else if (decoded.opcode === 1 && this._callbacks.delta) {
+          // Handle JSON deltas if any
+          this._callbacks.delta({ tokenKey: decoded.tokenKey, updates: decoded.updates || {}, rawUpdates: decoded.payload || [] });
+        } else {
+          // Log first few non-array messages for diagnostics
+          if (sampleCount < 3) {
+            sampleCount += 1;
+            this.logger.info(`🔍 Pulse message sample: ${JSON.stringify(decoded).substring(0, 500)}`);
+          }
+        }
+      }
     });
   }
 
@@ -326,8 +326,13 @@ class PulseWSConnector {
 
   refreshSnapshot() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.logger.info('🔄 Refreshing pulse snapshot...');
-      this.ws.send(JSON.stringify(PULSE_USER_STATE));
+      this.logger.info('🔄 Refreshing pulse snapshot (sending UserState + Join)...');
+      try {
+        this.ws.send(JSON.stringify(PULSE_USER_STATE));
+        this.ws.send(JSON.stringify({ action: 'join', room: 'update_pulse_v2' }));
+      } catch (err) {
+        this.logger.warning(`⚠️ Failed to send refresh trigger: ${err.message}`);
+      }
     } else {
       this.logger.warning('⚠️ Cannot refresh snapshot: WebSocket not connected');
     }

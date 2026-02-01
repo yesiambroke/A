@@ -12,6 +12,7 @@ const SettingsPage = async () => {
 
   if (!session) {
     redirect("/auth/login");
+    return null;
   }
 
   return (

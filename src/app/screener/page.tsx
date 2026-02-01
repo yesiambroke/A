@@ -11,8 +11,8 @@ const ScreenerPage = async () => {
   const session = await getSessionFromCookies();
 
   const operator = session ? {
-    userId: session.userId,
-    tier: session.tier,
+    accountId: session.accountId,
+    userTier: session.tier,
     is2faEnabled: session.is2faEnabled,
   } : null;
 

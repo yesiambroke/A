@@ -43,6 +43,48 @@ class TokenRegistry {
     this.invalidateCategoryViews();
   }
 
+  /**
+   * Sync registry with the latest snapshot pair addresses.
+   * Removes tokens that have a screener-related status but are no longer in the snapshot.
+   * @param {Set<string>} currentPairAddresses - Set of active pair addresses from the latest snapshot
+   */
+  syncPulseSnapshot(currentPairAddresses) {
+    let removedCount = 0;
+    for (const [address, token] of this.tokens) {
+      // Only purge tokens that belong to the "Screener" categories
+      const isScreenerToken = ['new', 'final_stretch', 'migrated'].includes(token.status);
+
+      if (isScreenerToken && !currentPairAddresses.has(token.pairAddress)) {
+        this.tokens.delete(address);
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      console.log(`🧹 Registry synchronized: removed ${removedCount} stale screener tokens`);
+      this.invalidateCategoryViews();
+    }
+  }
+
+  /**
+   * Completely clear all tokens belonging to screener categories.
+   * Used before applying a full snapshot to ensure a "fresh" list.
+   */
+  clearScreenerCategories() {
+    let count = 0;
+    const screenerStatuses = ['new', 'final_stretch', 'migrated'];
+    for (const [address, token] of this.tokens) {
+      if (screenerStatuses.includes(token.status)) {
+        this.tokens.delete(address);
+        count++;
+      }
+    }
+    if (count > 0) {
+      console.log(`🧹 Registry: cleared ${count} screener tokens for full refresh`);
+      this.invalidateCategoryViews();
+    }
+  }
+
   getAll() {
     return Array.from(this.tokens.values());
   }
@@ -160,7 +202,7 @@ class MarketDataNormalizer {
 
     const marketCapSol = tokenData.initial_liquidity_sol || 0;
     const marketCapUSD = this.solPrice ? marketCapSol * this.solPrice : null;
-    
+
     // Calculate token age in minutes
     let ageMinutes = null;
     if (tokenData.created_at) {
@@ -185,13 +227,13 @@ class MarketDataNormalizer {
       protocol: tokenData.protocol,
       creator: tokenData.creator,
       twitter: tokenData.twitter,
-      
+
       // Market data
       marketCapSol: marketCapSol,
       marketCapUSD: marketCapUSD,
       volumeSol: tokenData.initial_liquidity_sol || 0,
       volumeUSD: this.solPrice ? (tokenData.initial_liquidity_sol || 0) * this.solPrice : null,
-      
+
       // Token metrics
       age: ageMinutes,
       ageFormatted: this.formatAge(ageMinutes),
@@ -200,18 +242,18 @@ class MarketDataNormalizer {
       top10HoldersPercent: tokenData.top_10_holders || null,
       devHoldsPercent: tokenData.dev_holds_percent || null,
       snipersHoldPercent: tokenData.snipers_hold_percent || null,
-      
+
       // Timestamps
       createdAt: tokenData.created_at,
       receivedAt: new Date().toISOString(),
-      
+
       // Category (for coin screener)
       category: this.determineCategory(tokenData),
-      
+
       // Migration info (new tokens don't have this yet)
       migratedFrom: null,
       migratedTo: null,
-      
+
       // Status (determine based on protocol and bonding curve progress)
       status: this.determineStatus(null, tokenData.protocol, null, null) // new tokens don't have bonding curve progress yet
     };
@@ -317,30 +359,7 @@ class MarketDataNormalizer {
   normalizeTokenUpdate(parsedUpdate) {
     if (!parsedUpdate) return null;
 
-    const marketCapSol = parsedUpdate.marketCapSol || 0;
-    const marketCapUSD = this.solPrice ? marketCapSol * this.solPrice : null;
-    
-    // Calculate token age
-    let ageMinutes = null;
-    if (parsedUpdate.createdAt) {
-      try {
-        const createdAt = new Date(parsedUpdate.createdAt);
-        const now = new Date();
-        ageMinutes = (now - createdAt) / (1000 * 60);
-      } catch (e) {
-        // Invalid date
-      }
-    }
-
-    // Calculate price from virtual reserves
-    let priceSol = null;
-    let priceUSD = null;
-    if (parsedUpdate.virtualSolReserve != null && parsedUpdate.virtualTokenReserve != null && parsedUpdate.virtualTokenReserve > 0) {
-      priceSol = parsedUpdate.virtualSolReserve / parsedUpdate.virtualTokenReserve;
-      priceUSD = this.solPrice ? priceSol * this.solPrice : null;
-    }
-
-    return {
+    const result = {
       // Basic info
       tokenAddress: parsedUpdate.tokenAddress,
       tokenName: parsedUpdate.tokenName,
@@ -352,51 +371,64 @@ class MarketDataNormalizer {
       protocol: parsedUpdate.protocol,
       creator: parsedUpdate.creator,
       twitter: parsedUpdate.twitter,
-
-      // Market data
-      marketCapSol: marketCapSol,
-      marketCapUSD: marketCapUSD,
-      volumeSol: parsedUpdate.volumeSol || 0,
-      volumeUSD: this.solPrice ? (parsedUpdate.volumeSol || 0) * this.solPrice : null,
-      priceSol: priceSol,
-      priceUSD: priceUSD,
-      
-      // Token metrics
-      age: ageMinutes,
-      ageFormatted: this.formatAge(ageMinutes),
-      holders: parsedUpdate.holdersCount || null,
-      numHolders: parsedUpdate.holdersCount || null,
-      top10HoldersPercent: parsedUpdate.top10HoldersPercent || null,
-      devHoldsPercent: parsedUpdate.devHoldsPercent || null,
-      snipersHoldPercent: parsedUpdate.snipersHoldPercent || null,
-      bondingCurveProgress: parsedUpdate.bondingCurveProgress || null,
-      
-      // Timestamps
-      createdAt: parsedUpdate.createdAt,
       updatedAt: new Date().toISOString(),
-      
-      // Category
+      createdAt: parsedUpdate.createdAt,
       category: this.determineCategory(parsedUpdate),
-      
-      // Migration info - ensure we get it from parsedUpdate
       migratedFrom: parsedUpdate.migratedFrom || null,
-      migratedTo: parsedUpdate.migratedTo || null, // Address where token migrated to
-      
-      // Debug: log if we have Pump AMM protocol or migration info
-      // Status (determine based on protocol, bonding curve progress, and migration info)
-      status: (() => {
-        const status = this.determineStatus(
-          parsedUpdate.bondingCurveProgress, 
-          parsedUpdate.protocol, 
-          parsedUpdate.migratedFrom,
-          parsedUpdate.migratedTo
-        );
-        if (parsedUpdate.protocol === 'Pump AMM' || (parsedUpdate.protocol === 'Pump V1' && parsedUpdate.migratedTo)) {
-          console.log(`🔍 determineStatus - protocol: ${parsedUpdate.protocol}, migratedFrom: ${parsedUpdate.migratedFrom || 'null'}, migratedTo: ${parsedUpdate.migratedTo || 'null'}, status: ${status}`);
-        }
-        return status;
-      })()
+      migratedTo: parsedUpdate.migratedTo || null
     };
+
+    const existing = this.tokenRegistry.get(parsedUpdate.tokenAddress);
+    const isNew = !existing;
+
+    // Only include metrics if they are explicitly present OR if it's a new token
+    if (parsedUpdate.marketCapSol !== undefined && parsedUpdate.marketCapSol !== null) {
+      result.marketCapSol = parsedUpdate.marketCapSol;
+      if (this.solPrice) result.marketCapUSD = parsedUpdate.marketCapSol * this.solPrice;
+    } else if (isNew) {
+      result.marketCapSol = 0; // Default for new tokens if not provided
+    }
+
+    if (parsedUpdate.volumeSol !== undefined && parsedUpdate.volumeSol !== null) {
+      result.volumeSol = parsedUpdate.volumeSol;
+      if (this.solPrice) result.volumeUSD = parsedUpdate.volumeSol * this.solPrice;
+    } else if (isNew) {
+      result.volumeSol = 0;
+    }
+
+    if (parsedUpdate.virtualSolReserve != null && parsedUpdate.virtualTokenReserve != null && parsedUpdate.virtualTokenReserve > 0) {
+      const priceSol = parsedUpdate.virtualSolReserve / parsedUpdate.virtualTokenReserve;
+      result.priceSol = priceSol;
+      if (this.solPrice) result.priceUSD = priceSol * this.solPrice;
+    }
+
+    if (parsedUpdate.holdersCount !== undefined && parsedUpdate.holdersCount !== null) {
+      result.holders = parsedUpdate.holdersCount;
+      result.numHolders = parsedUpdate.holdersCount;
+    }
+
+    if (parsedUpdate.top10HoldersPercent !== undefined) result.top10HoldersPercent = parsedUpdate.top10HoldersPercent;
+    if (parsedUpdate.devHoldsPercent !== undefined) result.devHoldsPercent = parsedUpdate.devHoldsPercent;
+    if (parsedUpdate.snipersHoldPercent !== undefined) result.snipersHoldPercent = parsedUpdate.snipersHoldPercent;
+    if (parsedUpdate.bondingCurveProgress !== undefined) result.bondingCurveProgress = parsedUpdate.bondingCurveProgress;
+
+    // Calculate age
+    if (parsedUpdate.createdAt) {
+      const createdAtDate = new Date(parsedUpdate.createdAt);
+      const ageMinutes = (Date.now() - createdAtDate) / (1000 * 60);
+      result.age = ageMinutes;
+      result.ageFormatted = this.formatAge(ageMinutes);
+    }
+
+    // Status
+    result.status = this.determineStatus(
+      result.bondingCurveProgress !== undefined ? result.bondingCurveProgress : null,
+      result.protocol,
+      result.migratedFrom,
+      result.migratedTo
+    );
+
+    return result;
   }
 
   /**
@@ -411,18 +443,9 @@ class MarketDataNormalizer {
     const tokenAddress = base?.tokenAddress || pairAddress;
     const tokenName = base?.tokenName || '';
     const tokenTicker = base?.tokenTicker || '';
-
-    const marketCapSol = updates[19] ?? base?.marketCapSol ?? 0;
-    const marketCapUSD = this.solPrice ? marketCapSol * this.solPrice : null;
-    const volumeSol = updates[18] ?? base?.volumeSol ?? 0;
-    const volumeUSD = this.solPrice ? volumeSol * this.solPrice : null;
-    const bondingCurveProgress = updates[26] ?? base?.bondingCurveProgress ?? null;
     const createdAt = base?.createdAt || null;
-    const migratedFrom = base?.migratedFrom || base?.protocolDetails?.migratedFrom || base?.protocolDetails?.migrated_from || null;
-    const migratedTo = base?.migratedTo || base?.protocolDetails?.migratedTo || base?.protocolDetails?.migrated_to || null;
-    const ageMinutes = createdAt ? (Date.now() - new Date(createdAt).getTime()) / (1000 * 60) : null;
 
-    return {
+    const result = {
       tokenAddress,
       tokenName,
       tokenTicker,
@@ -431,31 +454,68 @@ class MarketDataNormalizer {
       imageUrl: base?.imageUrl || null,
       protocol: base?.protocol || null,
       pairAddress,
-
-      marketCapSol,
-      marketCapUSD,
-      volumeSol,
-      volumeUSD,
-
-      totalFeesSol: updates[20] ?? base?.totalFeesSol ?? null,
-      txCount: updates[23] ?? base?.txCount ?? null,
-      buyCount: updates[24] ?? base?.buyCount ?? null,
-      sellCount: updates[25] ?? base?.sellCount ?? null,
-      holders: updates[28] ?? base?.holders ?? null,
-      numHolders: updates[28] ?? base?.numHolders ?? null,
-      bondingCurveProgress,
-      migratedFrom,
-      migratedTo,
-      protocolDetails: base?.protocolDetails || null,
-      website: base?.website || null,
-      twitter: base?.twitter || null,
-      telegram: base?.telegram || null,
-      age: ageMinutes,
-      ageFormatted: this.formatAge(ageMinutes),
-      createdAt,
       updatedAt: new Date().toISOString(),
       status: base?.status || 'new'
     };
+
+    const existing = this.tokenRegistry.get(tokenAddress);
+    const isNew = !existing;
+
+    // Include metrics if present in delta, OR fallback to base for newly discovered tokens
+    if (updates[19] !== undefined) {
+      result.marketCapSol = updates[19];
+      if (this.solPrice) result.marketCapUSD = updates[19] * this.solPrice;
+    } else if (isNew && base?.marketCapSol !== undefined) {
+      result.marketCapSol = base.marketCapSol;
+      if (this.solPrice) result.marketCapUSD = base.marketCapSol * this.solPrice;
+    } else if (isNew) {
+      result.marketCapSol = 0;
+    }
+
+    if (updates[18] !== undefined) {
+      result.volumeSol = updates[18];
+      if (this.solPrice) result.volumeUSD = updates[18] * this.solPrice;
+    } else if (isNew && base?.volumeSol !== undefined) {
+      result.volumeSol = base.volumeSol;
+      if (this.solPrice) result.volumeUSD = base.volumeSol * this.solPrice;
+    } else if (isNew) {
+      result.volumeSol = 0;
+    }
+
+    if (updates[26] !== undefined) {
+      result.bondingCurveProgress = updates[26];
+    } else if (isNew && base?.bondingCurveProgress !== undefined) {
+      result.bondingCurveProgress = base.bondingCurveProgress;
+    }
+
+    if (updates[20] !== undefined) result.totalFeesSol = updates[20];
+    if (updates[23] !== undefined) result.txCount = updates[23];
+    if (updates[24] !== undefined) result.buyCount = updates[24];
+    if (updates[25] !== undefined) result.sellCount = updates[25];
+
+    if (updates[28] !== undefined) {
+      result.holders = updates[28];
+      result.numHolders = updates[28];
+    } else if (isNew && (base?.holders !== undefined || base?.numHolders !== undefined)) {
+      result.holders = base.holders || base.numHolders;
+      result.numHolders = base.numHolders || base.holders;
+    }
+
+    // Include static metadata fallbacks
+    if (base?.website) result.website = base.website;
+    if (base?.twitter) result.twitter = base.twitter;
+    if (base?.telegram) result.telegram = base.telegram;
+    if (base?.protocolDetails) result.protocolDetails = base.protocolDetails;
+    if (base?.migratedFrom) result.migratedFrom = base.migratedFrom;
+    if (base?.migratedTo) result.migratedTo = base.migratedTo;
+
+    if (createdAt) {
+      result.createdAt = createdAt;
+      result.age = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60);
+      result.ageFormatted = this.formatAge(result.age);
+    }
+
+    return result;
   }
 
   /**
@@ -480,17 +540,17 @@ class MarketDataNormalizer {
    */
   determineStatus(bondingCurveProgress, protocol, migratedFrom, migratedTo) {
     // Normalize migratedFrom for comparison
-    const normalizedMigratedFrom = migratedFrom && typeof migratedFrom === 'string' 
-      ? migratedFrom.trim() 
+    const normalizedMigratedFrom = migratedFrom && typeof migratedFrom === 'string'
+      ? migratedFrom.trim()
       : null;
-    
+
     // PRIMARY CASE: If migratedFrom === 'Pump V1', it's migrated (regardless of current protocol)
     // This is the main indicator - if a token has migratedFrom: "Pump V1", it means it originated from Pump V1
     if (normalizedMigratedFrom === 'Pump V1') {
       //console.log(`✅ Migrated token detected (has migratedFrom: Pump V1): protocol=${protocol}, migratedFrom=${normalizedMigratedFrom}, migratedTo=${migratedTo || 'null'}`);
       return 'migrated';
     }
-    
+
     // SECONDARY CASE: Pump AMM protocol (should also have migratedFrom, but check anyway)
     if (protocol === 'Pump AMM') {
       if (normalizedMigratedFrom === 'Pump V1') {
@@ -501,16 +561,16 @@ class MarketDataNormalizer {
         //console.log(`⚠️  Pump AMM token but not migrated from Pump V1: migratedFrom=${normalizedMigratedFrom || 'null'}, protocol=${protocol}`);
       }
     }
-    
+
     // TERTIARY CASE: Pump V1 with migratedTo (bonding curve completed and migrated)
-    if (protocol === 'Pump V1' && 
-        bondingCurveProgress !== null && 
-        bondingCurveProgress >= 100 && 
-        migratedTo) {
+    if (protocol === 'Pump V1' &&
+      bondingCurveProgress !== null &&
+      bondingCurveProgress >= 100 &&
+      migratedTo) {
       //console.log(`✅ Migrated token detected (Pump V1 with migratedTo): protocol=${protocol}, bondingCurveProgress=${bondingCurveProgress}, migratedTo=${migratedTo}`);
       return 'migrated';
     }
-    
+
     // If bonding curve progress is 100% or more AND still on Pump V1, check if it has migratedTo
     // If no migratedTo, it's still in final stretch (about to migrate)
     if (bondingCurveProgress !== null && bondingCurveProgress !== undefined && bondingCurveProgress >= 100) {
@@ -522,12 +582,12 @@ class MarketDataNormalizer {
         }
       }
     }
-    
+
     // If still on Pump V1 and bonding curve progress < 100, it's final stretch
     if (protocol === 'Pump V1' && bondingCurveProgress !== null && bondingCurveProgress !== undefined && bondingCurveProgress < 100) {
       return 'final_stretch';
     }
-    
+
     // Default to new/trending (we'll filter these out)
     // This includes:
     // - Pump AMM tokens that didn't come from Pump V1 (e.g., from Virtual Curve, Meteora, etc.)
@@ -540,16 +600,16 @@ class MarketDataNormalizer {
    */
   formatAge(ageMinutes) {
     if (ageMinutes === null || ageMinutes === undefined) return 'N/A';
-    
+
     const months = Math.floor(ageMinutes / (60 * 24 * 30));
     if (months > 0) return `${months}M`;
-    
+
     const days = Math.floor(ageMinutes / (60 * 24));
     if (days > 0) return `${days}D`;
-    
+
     const hours = Math.floor(ageMinutes / 60);
     if (hours > 0) return `${hours}H`;
-    
+
     return `${Math.floor(ageMinutes)}m`;
   }
 
@@ -558,7 +618,7 @@ class MarketDataNormalizer {
    */
   formatMarketCap(marketCapUSD) {
     if (!marketCapUSD) return 'N/A';
-    
+
     if (marketCapUSD >= 1000000000) {
       return `$${(marketCapUSD / 1000000000).toFixed(2)}B`;
     } else if (marketCapUSD >= 1000000) {

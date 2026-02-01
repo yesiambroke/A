@@ -19,15 +19,15 @@ class MarketRelayServer {
     this.wsHttpServer = null; // Underlying server for WS (http/https)
     this.wss = null;
     this.clients = new Set(); // Connected WebSocket clients
-    
+
     // Axiom components
     this.authManager = new AxiomAuthManager('axiom_session.json');
     this.wsConnector = null;
     this.normalizer = new MarketDataNormalizer();
-    
+
     // OTP flow state (in-memory, cleared on restart)
     this.otpState = new Map(); // email -> { otpJwtToken, timestamp }
-    
+
     // Market data cache (trending separate, pulse categories use registry)
     this.marketData = {
       trending: [],
@@ -50,23 +50,24 @@ class MarketRelayServer {
     this.pulseData = { snapshot: null, lastDelta: null };
     this.pulseBaseMap = new Map(); // pairAddress -> base metadata from snapshot
     this.pulseSnapshotPath = 'pulse-v2-last-snapshot.json';
-    
+    this.pulseSnapshotInterval = null;
+
     // Setup Express app
     this.setupExpress();
 
     // WebSocket server will be started after Axiom connection is established
     // this.setupWebSocketServer();
-    
+
     // Clean up expired OTP states every 10 minutes
     setInterval(() => {
       this.cleanupOTPStates();
     }, 10 * 60 * 1000);
   }
-  
+
   cleanupOTPStates() {
     const now = Date.now();
     const maxAge = 10 * 60 * 1000; // 10 minutes
-    
+
     for (const [email, state] of this.otpState.entries()) {
       if (now - state.timestamp > maxAge) {
         this.otpState.delete(email);
@@ -96,112 +97,112 @@ class MarketRelayServer {
   setupExpress() {
     this.app.use(cors());
     this.app.use(express.json());
-    
+
     // Simple proxy to bypass CORS for pump.fun coin lookup
     this.app.get('/api/pumpfun/coins/:tokenAddress', async (req, res) => {
       const { tokenAddress } = req.params;
       if (!tokenAddress) {
         return res.status(400).json({ success: false, error: 'tokenAddress is required' });
       }
-       try {
-         const upstream = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenAddress}`);
-         if (!upstream.ok) {
-           const body = await upstream.text();
-           return res.status(upstream.status).json({ success: false, error: body.substring(0, 200) });
-         }
-         const data = await upstream.json();
-         return res.json({ success: true, data });
-       } catch (err) {
-         console.error('❌ pump.fun proxy error:', err.message);
-         return res.status(500).json({ success: false, error: 'Proxy request failed' });
-       }
+      try {
+        const upstream = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenAddress}`);
+        if (!upstream.ok) {
+          const body = await upstream.text();
+          return res.status(upstream.status).json({ success: false, error: body.substring(0, 200) });
+        }
+        const data = await upstream.json();
+        return res.json({ success: true, data });
+      } catch (err) {
+        console.error('❌ pump.fun proxy error:', err.message);
+        return res.status(500).json({ success: false, error: 'Proxy request failed' });
+      }
     });
-    
+
     // Health check endpoint
     this.app.get('/health', (req, res) => {
-      res.json({ 
-        status: 'ok', 
+      res.json({
+        status: 'ok',
         connected: this.wsConnector?.isConnected || false,
         clients: this.clients.size,
         solPrice: this.marketData.solPrice
       });
     });
-    
+
     // Admin endpoint for OTP initialization
     this.app.post('/admin/axiom/init', async (req, res) => {
       try {
         const { email, password_b64, otp_code } = req.body;
-        
+
         if (!email || !password_b64) {
-          return res.status(400).json({ 
-            success: false, 
-            error: 'email and password_b64 are required' 
+          return res.status(400).json({
+            success: false,
+            error: 'email and password_b64 are required'
           });
         }
-        
+
         if (!otp_code) {
           // Step 1: Request OTP
           try {
             const otpJwtToken = await this.authManager.performFullLogin(email, password_b64);
-            
+
             // Store OTP state
             this.otpState.set(email, {
               otpJwtToken,
               timestamp: Date.now()
             });
-            
-            return res.json({ 
-              success: true, 
+
+            return res.json({
+              success: true,
               requires_otp: true,
               message: 'OTP sent to email. Provide otp_code to complete login.'
             });
           } catch (error) {
-            return res.status(500).json({ 
-              success: false, 
-              error: error.message 
+            return res.status(500).json({
+              success: false,
+              error: error.message
             });
           }
         }
-        
+
         // Step 2: Complete login with OTP
         try {
           // Get OTP JWT token from stored state
           const otpState = this.otpState.get(email);
           if (!otpState) {
-            return res.status(400).json({ 
-              success: false, 
-              error: 'OTP flow not started. Call without otp_code first.' 
+            return res.status(400).json({
+              success: false,
+              error: 'OTP flow not started. Call without otp_code first.'
             });
           }
-          
+
           await this.authManager.loginStep2(otpState.otpJwtToken, otp_code, email, password_b64);
           this.authManager.saveSession();
-          
+
           // Clear OTP state
           this.otpState.delete(email);
-          
+
           // Initialize WebSocket connection after successful auth
           await this.initializeAxiomConnection();
-          
-          return res.json({ 
-            success: true, 
-            message: 'Axiom authentication complete' 
+
+          return res.json({
+            success: true,
+            message: 'Axiom authentication complete'
           });
         } catch (error) {
-          return res.status(500).json({ 
-            success: false, 
-            error: error.message 
+          return res.status(500).json({
+            success: false,
+            error: error.message
           });
         }
       } catch (error) {
         console.error('Admin endpoint error:', error);
-        return res.status(500).json({ 
-          success: false, 
-          error: 'Internal server error' 
+        return res.status(500).json({
+          success: false,
+          error: 'Internal server error'
         });
       }
     });
-    
+
     // Get current market data (REST API) - Trending, Final Stretch, Migrated and New Mint, top 20 each
     this.app.get('/api/market-data', (req, res) => {
       res.json({
@@ -216,7 +217,7 @@ class MarketRelayServer {
         }
       });
     });
-    
+
     // REST API for trending coins - returns cached WebSocket data (no longer fetches from API)
     this.app.get('/api/trending', (req, res) => {
       //console.log('🔥 Returning cached trending data from WebSocket...');
@@ -361,6 +362,56 @@ class MarketRelayServer {
       }
     });
 
+    // Token search endpoint - proxy to Axiom search API
+    this.app.get('/api/search', async (req, res) => {
+      const { query } = req.query;
+      if (!query) {
+        return res.status(400).json({ success: false, error: 'query parameter is required' });
+      }
+
+      try {
+        // Ensure valid authentication
+        if (!await this.authManager.ensureValidAuthentication()) {
+          return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
+
+        const tokens = this.authManager.getTokens();
+        const url = `https://api10.axiom.trade/search-v3?searchQuery=${encodeURIComponent(query)}&isOg=false&isPumpSearch=true&isBonkSearch=false&isBagsSearch=false&isUsd1Search=false&onlyBonded=false&v=${Date.now()}`;
+
+        const headers = {
+          'accept': 'application/json, text/plain, */*',
+          'accept-language': 'en-US,en;q=0.9',
+          'cache-control': 'no-cache',
+          'cookie': `auth-refresh-token=${tokens.refresh_token}; auth-access-token=${tokens.access_token}`,
+          'pragma': 'no-cache',
+          'referer': 'https://axiom.trade/',
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
+        };
+
+        const response = await fetch(url, { headers });
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Search API error: ${response.status} ${errorText.substring(0, 200)}`);
+          return res.status(response.status).json({ success: false, error: `Search API returned ${response.status}` });
+        }
+
+        const results = await response.json();
+        const pumpResults = Array.isArray(results)
+          ? results.filter(r => r.protocol === 'Pump AMM' || r.protocol === 'Pump V1')
+          : [];
+
+        console.log(`🔍 Search for "${query}" returned ${pumpResults.length} Pump tokens (V1 + AMM)`);
+        return res.json({
+          success: true,
+          results: pumpResults,
+          solPrice: this.marketData.solPrice
+        });
+      } catch (error) {
+        console.error('❌ Search API error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // Debug endpoint to check auth status
     this.app.get('/debug/auth-status', (req, res) => {
       const tokens = this.authManager.getTokens();
@@ -415,9 +466,9 @@ class MarketRelayServer {
     this.wss.on('connection', (ws, req) => {
       const clientIP = req.socket.remoteAddress;
       console.log(`🔌 New market data client connected from ${clientIP}`);
-      
+
       this.clients.add(ws);
-      
+
       // Send initial market data (Trending, Final Stretch, Migrated and New Mint, top 50 each)
       ws.send(JSON.stringify({
         type: 'market_data',
@@ -430,17 +481,17 @@ class MarketRelayServer {
           lastUpdate: this.marketData.lastUpdate
         }
       }));
-      
+
       // Handle client messages (subscriptions, etc.)
       ws.on('message', (message) => {
         try {
           const data = JSON.parse(message.toString());
-          
+
           switch (data.type) {
             case 'ping':
               ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
               break;
-              
+
             case 'subscribe':
               // Handle topic subscriptions if needed
               ws.send(JSON.stringify({
@@ -465,7 +516,7 @@ class MarketRelayServer {
                 this.handleTradeUnsubscription(ws, data.mint);
               }
               break;
-              
+
             default:
               console.log(`Unknown message type: ${data.type}`);
           }
@@ -473,7 +524,7 @@ class MarketRelayServer {
           console.error('Error handling client message:', error);
         }
       });
-      
+
       ws.on('close', () => {
         this.clients.delete(ws);
 
@@ -488,13 +539,13 @@ class MarketRelayServer {
 
         console.log(`❌ Market data client disconnected`);
       });
-      
+
       ws.on('error', (error) => {
         console.error('WebSocket client error:', error);
         this.clients.delete(ws);
       });
     });
-    
+
     console.log(`🚀 Market Relay WebSocket server started on port ${this.port}`);
   }
 
@@ -569,10 +620,10 @@ class MarketRelayServer {
         console.log('📡 [DEBUG] Response headers:', Object.fromEntries(response.headers.entries()));
 
         if (!response.ok) {
-        console.error(`❌ [ERROR] Failed to fetch trending tokens: ${response.status} ${response.statusText}`);
-        const errorText = await response.text();
-        console.error('❌ [ERROR] Error response:', errorText.substring(0, 200));
-        return false;
+          console.error(`❌ [ERROR] Failed to fetch trending tokens: ${response.status} ${response.statusText}`);
+          const errorText = await response.text();
+          console.error('❌ [ERROR] Error response:', errorText.substring(0, 200));
+          return false;
         }
 
         console.log('📦 [DEBUG] Parsing JSON response...');
@@ -836,7 +887,7 @@ class MarketRelayServer {
       tokenImage: data.image_uri,
       tokenDecimals: data.decimals || 6,
       marketCapSol: data.market_cap || 0,
-      supply: data.total_supply/1000000 || 0,
+      supply: data.total_supply / 1000000 || 0,
       dexPaid: data.dex_paid || false,
       feeVolumeSol: data.fee_volume || 0,
       pairAddress: data.pump_swap_pool || data.bonding_curve || tokenAddress
@@ -1140,9 +1191,9 @@ class MarketRelayServer {
 
         // TERTIARY CHECK: Pump V1 with bondingCurveProgress >= 100 AND migratedTo exists
         const isPumpV1Migrated = parsedToken.protocol === 'Pump V1' &&
-                                  parsedToken.bondingCurveProgress !== null &&
-                                  parsedToken.bondingCurveProgress >= 100 &&
-                                  parsedToken.migratedTo;
+          parsedToken.bondingCurveProgress !== null &&
+          parsedToken.bondingCurveProgress >= 100 &&
+          parsedToken.migratedTo;
 
         // Normalize the token and let determineStatus decide
         const normalized = this.normalizer.normalizeTokenUpdate(parsedToken);
@@ -1187,7 +1238,7 @@ class MarketRelayServer {
       console.error('❌ Error fetching initial migrated tokens:', error.message);
       return false;
     }
-   }
+  }
 
   async initializeAxiomConnection() {
     try {
@@ -1289,7 +1340,7 @@ class MarketRelayServer {
         const is100Percent = parsedUpdate.bondingCurveProgress !== null && parsedUpdate.bondingCurveProgress >= 100;
 
         if (parsedUpdate.protocol === 'Pump AMM' ||
-            parsedUpdate.protocol === 'Pump V1' && (hasMigrationInfo || is100Percent)) {
+          parsedUpdate.protocol === 'Pump V1' && (hasMigrationInfo || is100Percent)) {
           console.log(`🔍 Token update - Protocol: ${parsedUpdate.protocol}, Progress: ${parsedUpdate.bondingCurveProgress || 'null'}%, migratedFrom: ${parsedUpdate.migratedFrom || 'null'}, migratedTo: ${parsedUpdate.migratedTo || 'null'}, Token: ${parsedUpdate.tokenName || parsedUpdate.tokenTicker}`);
         }
 
@@ -1305,8 +1356,8 @@ class MarketRelayServer {
 
         // Debug: log normalized status for migration-related tokens
         if (normalized.status === 'migrated' ||
-            (normalized.protocol === 'Pump V1' && normalized.bondingCurveProgress >= 100) ||
-            normalized.protocol === 'Pump AMM') {
+          (normalized.protocol === 'Pump V1' && normalized.bondingCurveProgress >= 100) ||
+          normalized.protocol === 'Pump AMM') {
           //console.log(`🔍 Normalized - Status: ${normalized.status}, Protocol: ${normalized.protocol}, Progress: ${normalized.bondingCurveProgress || 'null'}%, migratedFrom: ${normalized.migratedFrom || 'null'}, migratedTo: ${normalized.migratedTo || 'null'}, Token: ${normalized.tokenName || normalized.tokenTicker}`);
         }
 
@@ -1378,28 +1429,37 @@ class MarketRelayServer {
       const PulseWSConnector = require('./pulse-ws-connector');
       this.pulseConnector = new PulseWSConnector(this.authManager, 'INFO');
 
-       this.pulseConnector.onSnapshot((payload) => {
-         // Pulse connector passes { tokenKey, payload }; unwrap tokenKey which contains the data
-         const snap = payload?.tokenKey || payload;
+      this.pulseConnector.onSnapshot((payload) => {
+        // Pulse connector passes { tokenKey, payload }; unwrap tokenKey which contains the data
+        const snap = payload?.tokenKey || payload;
 
-         this.pulseData.snapshot = snap;
-         this.logRawSample('pulse_v2_snapshot', { ts: Date.now(), length: Array.isArray(snap?.newPairs) ? snap.newPairs.length : 0 });
-         const npLen = Array.isArray(snap?.newPairs) ? snap.newPairs.length : 0;
-         const fsLen = Array.isArray(snap?.finalStretch) ? snap.finalStretch.length : 0;
-         const migLen = Array.isArray(snap?.migrated) ? snap.migrated.length : 0;
-         console.log(`📦 Pulse snapshot received newPairs=${npLen} finalStretch=${fsLen} migrated=${migLen}`);
-         if (npLen === 0 && fsLen === 0 && migLen === 0) {
-           console.log('⚠️  Pulse snapshot is empty, payload structure:', JSON.stringify(payload).substring(0, 500));
-         }
-         this.processPulseSnapshot(snap);
-       });
+        this.pulseData.snapshot = snap;
+        this.logRawSample('pulse_v2_snapshot', { ts: Date.now(), length: Array.isArray(snap?.newPairs) ? snap.newPairs.length : 0 });
+        const npLen = Array.isArray(snap?.newPairs) ? snap.newPairs.length : 0;
+        const fsLen = Array.isArray(snap?.finalStretch) ? snap.finalStretch.length : 0;
+        const migLen = Array.isArray(snap?.migrated) ? snap.migrated.length : 0;
+        console.log(`📦 Pulse snapshot received newPairs=${npLen} finalStretch=${fsLen} migrated=${migLen}`);
+        if (npLen === 0 && fsLen === 0 && migLen === 0) {
+          console.log('⚠️  Pulse snapshot is empty, payload structure:', JSON.stringify(payload).substring(0, 500));
+        }
+        this.processPulseSnapshot(snap);
+      });
 
-       this.pulseConnector.onDelta((delta) => {
-         this.applyPulseDelta(delta);
-       });
+      this.pulseConnector.onDelta((delta) => {
+        this.applyPulseDelta(delta);
+      });
 
       await this.pulseConnector.connect();
       console.log('✅ Pulse v2 connector initialized (live feed)');
+
+      // Start periodic snapshot refresh (every 5 seconds)
+      if (this.pulseSnapshotInterval) clearInterval(this.pulseSnapshotInterval);
+      this.pulseSnapshotInterval = setInterval(() => {
+        if (this.pulseConnector && this.pulseConnector.isConnected) {
+          this.pulseConnector.refreshSnapshot();
+        }
+      }, 5000);
+      console.log('⏱️ Pulse snapshot refresh interval started (5s)');
     } catch (err) {
       console.error('⚠️ Pulse v2 connector failed to start:', err.message);
     }
@@ -1408,6 +1468,9 @@ class MarketRelayServer {
   processPulseSnapshot(snap) {
     if (!snap || typeof snap !== 'object') return;
     const { newPairs = [], finalStretch = [], migrated = [] } = snap;
+
+    // Completely clear screener categories before applying the fresh snapshot
+    this.normalizer.tokenRegistry.clearScreenerCategories();
 
     this.pulseBaseMap.clear();
 
@@ -1428,7 +1491,16 @@ class MarketRelayServer {
         twitter: entry[10] || null,
         telegram: entry[11] || null,
         status,
-        createdAt: entry[33] || entry[34] || entry[30] || null,
+        createdAt: (() => {
+          // Robust timestamp extraction: prefer strings that look like ISO dates
+          // indices 34, 33, 30 are candidates, but some may be small ints or objects
+          const candidates = [entry[34], entry[33], entry[30], entry[32]];
+          for (const c of candidates) {
+            if (typeof c === 'string' && c.length > 20 && c.includes('T') && c.includes('Z')) return c;
+            if (typeof c === 'number' && c > 1000000000000) return new Date(c).toISOString();
+          }
+          return null;
+        })(),
         migratedFrom: protocolDetails?.migratedFrom || protocolDetails?.migrated_from || null,
         migratedTo: protocolDetails?.migratedTo || protocolDetails?.migrated_to || null,
         bondingCurveProgress: entry[26] ?? null,
@@ -1447,29 +1519,29 @@ class MarketRelayServer {
 
       this.pulseBaseMap.set(base.pairAddress, base);
 
-      // Check if token already exists in registry
-      const existing = this.normalizer.tokenRegistry.get(base.tokenAddress);
-      if (existing) {
-        // Token exists, don't update metrics from snapshot to preserve delta updates
-        return null;
-      }
-
       const updates = {}; // Empty for snapshot
-      return this.normalizer.normalizePulseV2Update({ tokenKey: base.pairAddress, updates }, base);
+      const normalized = this.normalizer.normalizePulseV2Update({ tokenKey: base.pairAddress, updates }, base);
+
+      return normalized;
     };
 
     const normalizedNew = newPairs.map((e) => toNormalized(e, 'new')).filter(Boolean);
     const normalizedFs = finalStretch.map((e) => toNormalized(e, 'final_stretch')).filter(Boolean);
     const normalizedMig = migrated.map((e) => toNormalized(e, 'migrated')).filter(Boolean);
 
-    const createdAtMs = (token) => {
-      const ts = new Date(token.createdAt || 0).getTime();
-      return Number.isFinite(ts) ? ts : 0;
-    };
+    // Collect all active pair addresses from this snapshot to purge staleness
+    const snapshotAddresses = new Set();
+    [...newPairs, ...finalStretch, ...migrated].forEach(entry => {
+      if (entry && entry[0]) snapshotAddresses.add(entry[0]);
+    });
 
-    // Add to registry (only new tokens, preserve existing metrics)
+    // Add to registry (new and updated tokens)
+    normalizedNew.forEach(token => { if (token) this.normalizer.tokenRegistry.addOrUpdate(token); });
     normalizedFs.forEach(token => { if (token) this.normalizer.tokenRegistry.addOrUpdate(token); });
     normalizedMig.forEach(token => { if (token) this.normalizer.tokenRegistry.addOrUpdate(token); });
+
+    // Sync registry: remove tokens that are no longer in the snapshot
+    this.normalizer.tokenRegistry.syncPulseSnapshot(snapshotAddresses);
 
     this.marketData.lastUpdate = new Date().toISOString();
     console.log(`✅ Pulse snapshot applied to registry: newMint=${this.normalizer.tokenRegistry.getCategoryView('newMint').length}, finalStretch=${this.normalizer.tokenRegistry.getCategoryView('finalStretch').length}, migrated=${this.normalizer.tokenRegistry.getCategoryView('migrated').length}`);
@@ -1515,25 +1587,28 @@ class MarketRelayServer {
 
     // Apply delta to registry
     let base = this.pulseBaseMap.get(delta.tokenKey);
+
+    // Fallback: Check if we have this LP in cache and the token in registry
     if (!base) {
-      // Try to reconstruct base
-      let tokenMint = null;
-      for (const [mint, lp] of this.lpCache.entries()) {
-        if (lp === delta.tokenKey) {
-          tokenMint = mint;
-          break;
+      const tokenMint = this.lpCache.get(delta.tokenKey);
+      if (tokenMint) {
+        const registered = this.normalizer.tokenRegistry.get(tokenMint);
+        if (registered) {
+          this.pulseBaseMap.set(delta.tokenKey, registered);
+          base = registered;
         }
       }
+    }
 
+    if (!base) {
+      // Deep search fallback
       const searchPool = [
         ...this.normalizer.tokenRegistry.getCategoryView('newMint'),
         ...this.normalizer.tokenRegistry.getCategoryView('finalStretch'),
         ...this.normalizer.tokenRegistry.getCategoryView('migrated')
       ];
 
-      const fallback = tokenMint
-        ? searchPool.find((t) => t.tokenAddress === tokenMint)
-        : searchPool.find((t) => t.pairAddress === delta.tokenKey || t.tokenAddress === delta.tokenKey);
+      const fallback = searchPool.find((t) => t.pairAddress === delta.tokenKey || t.tokenAddress === delta.tokenKey);
       if (fallback) {
         this.pulseBaseMap.set(delta.tokenKey, fallback);
         base = fallback;
@@ -1541,7 +1616,7 @@ class MarketRelayServer {
     }
 
     if (!base) {
-      console.log(`⚠️ Pulse delta received without base for ${delta.tokenKey}`);
+      // console.log(`⚠️ Pulse delta received without base for ${delta.tokenKey}`);
       return;
     }
 
@@ -1815,7 +1890,7 @@ class MarketRelayServer {
     this.httpServer = this.app.listen(expressPort, () => {
       console.log(`🌐 Market Relay HTTP server started on port ${expressPort}`);
     });
-    
+
     // Try to restore session and connect
     try {
       if (this.authManager.loadSession()) {
@@ -1849,6 +1924,13 @@ class MarketRelayServer {
     // Disconnect Axiom WebSocket
     if (this.wsConnector) {
       this.wsConnector.disconnect();
+    }
+
+    // Clear Pulse snapshot interval
+    if (this.pulseSnapshotInterval) {
+      clearInterval(this.pulseSnapshotInterval);
+      this.pulseSnapshotInterval = null;
+      console.log('🛑 Pulse snapshot refresh interval cleared');
     }
 
     // Close all client connections
@@ -1890,12 +1972,12 @@ class MarketRelayServer {
 if (require.main === module) {
   const server = new MarketRelayServer();
   server.start();
-  
+
   // Graceful shutdown
   process.on('SIGINT', () => {
     server.shutdown();
   });
-  
+
   process.on('SIGTERM', () => {
     server.shutdown();
   });

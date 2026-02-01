@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+
+const isProd = process.env.NODE_ENV === "production";
+
 const envSchema = z.object({
   DB_HOST: z.string().default("localhost"),
   DB_PORT: z.coerce.number().int().min(1).default(5432),
@@ -18,6 +21,10 @@ const envSchema = z.object({
   RATE_LIMIT_LOGIN_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
   RATE_LIMIT_PIN_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   RATE_LIMIT_2FA_ATTEMPTS: z.coerce.number().int().min(1).default(5),
+  PAYMENT_GATEWAY_API_URL: z.string().default(isProd ? "https://payment.apteka.wtf/api/v1" : "http://localhost:369/api/v1"),
+  PAYMENT_GATEWAY_API_KEY: z.string().default("dev_api_key"),
+  PAYMENT_GATEWAY_WEBHOOK_SECRET: z.string().default("dev_webhook_secret"),
+  UPGRADE_WEBHOOK_URL: z.string().default(isProd ? "https://a-trade.fun/api/upgrade/webhook" : "http://localhost:3000/api/upgrade/webhook"),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -51,5 +58,11 @@ export const serverEnv = {
     loginWindowMinutes: values.RATE_LIMIT_LOGIN_WINDOW_MINUTES,
     pinAttempts: values.RATE_LIMIT_PIN_ATTEMPTS,
     twoFaAttempts: values.RATE_LIMIT_2FA_ATTEMPTS,
+  },
+  paymentGateway: {
+    apiUrl: values.PAYMENT_GATEWAY_API_URL,
+    apiKey: values.PAYMENT_GATEWAY_API_KEY,
+    webhookSecret: values.PAYMENT_GATEWAY_WEBHOOK_SECRET,
+    webhookUrl: values.UPGRADE_WEBHOOK_URL,
   },
 };

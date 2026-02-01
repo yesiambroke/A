@@ -3,6 +3,7 @@ import { serverEnv } from "@/config/serverEnv";
 
 export type SessionPayload = {
   userId: number;
+  accountId: string;
   tier: string;
   is2faEnabled: boolean;
   sessionId: string;

@@ -5,6 +5,7 @@ import Link from "next/link";
 
 type UserInfo = {
   userId: number;
+  accountId: string;
   tier: string;
   is2faEnabled: boolean;
 };
@@ -27,6 +28,12 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
   const [authKey, setAuthKey] = React.useState<string | null>(null);
   const [authKeyExpires, setAuthKeyExpires] = React.useState<number | null>(null);
   const [generatingKey, setGeneratingKey] = React.useState(false);
+  const [toastMessage, setToastMessage] = React.useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
 
 
@@ -69,7 +76,7 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
 
         // Show recovery key invalidation message
         setTimeout(() => {
-          alert("2FA disabled successfully!\n\nYour recovery key has been invalidated for security.\n\nIf you need to re-enable 2FA in the future, a new recovery key will be generated.");
+          showToast("2FA disabled successfully! Your recovery key has been invalidated.");
           setToggleState("idle");
         }, 1500);
       } catch (err) {
@@ -145,7 +152,7 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
       setAuthKeyExpires(data.expiresAt);
     } catch (err) {
       console.error("Generate auth key error:", err);
-      alert("Failed to generate auth key: " + (err instanceof Error ? err.message : "Unknown error"));
+      showToast("❌ Failed to generate auth key: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
       setGeneratingKey(false);
     }
@@ -169,14 +176,14 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
       setAuthKeyExpires(null);
     } catch (err) {
       console.error("Revoke auth key error:", err);
-      alert("Failed to revoke auth key: " + (err instanceof Error ? err.message : "Unknown error"));
+      showToast("❌ Failed to revoke auth key: " + (err instanceof Error ? err.message : "Unknown error"));
     }
   };
 
   const copyAuthKey = () => {
     if (authKey) {
       navigator.clipboard.writeText(authKey);
-      alert("Auth key copied to clipboard!");
+      showToast("Auth key copied to clipboard!");
     }
   };
 
@@ -231,7 +238,7 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
           <div className="text-sm text-green-200 space-y-2">
             <div className="flex justify-between border border-green-500/20 px-2 py-1">
               <span className="text-green-500/80">User</span>
-              <span className="font-semibold text-green-200">#{user.userId}</span>
+              <span className="font-semibold text-green-200">#{user.accountId}</span>
             </div>
             <div className="flex justify-between border border-green-500/20 px-2 py-1">
               <span className="text-green-500/80">Tier</span>
@@ -498,7 +505,7 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
           <p className="text-xs uppercase tracking-[0.3em] text-green-400/70">Wallet Client Connection</p>
           <div className="space-y-4">
             <div className="text-sm text-green-300">
-              Connect your wallet client to enable secure trading. Generate an authentication key and enter it in your wallet client.
+              Connect your wallet client to enable secure trading.
             </div>
 
             <div className="space-y-3">
@@ -554,21 +561,22 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
                   </button>
                 </div>
               )}
-
-              <div className="text-[11px] text-green-500/80 space-y-1">
-                <p><strong>How to connect:</strong></p>
-                <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>Generate an auth key above</li>
-                  <li>Copy the key to your clipboard</li>
-                  <li>Open your wallet client application</li>
-                  <li>Enter the auth key in the connection settings</li>
-                  <li>Your wallets will appear in the trading terminal</li>
-                </ol>
-              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-500 ease-out">
+          <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <span className="text-green-200/80">✓</span>
+              <span dangerouslySetInnerHTML={{ __html: toastMessage }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

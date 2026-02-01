@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       sessionToken: session.sessionId, // Use session ID as token
-      userId: session.userId,
+      accountId: session.accountId,
       userTier: session.tier
     });
 

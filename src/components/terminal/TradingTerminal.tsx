@@ -61,8 +61,8 @@ const CustomIcons = {
 };
 
 type OperatorProps = {
-  userId: number;
-  tier: string;
+  accountId: string;
+  userTier: string;
   is2faEnabled: boolean;
 };
 
@@ -84,6 +84,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const [tradePercentage, setTradePercentage] = useState<string>('');
   const [slippage, setSlippage] = useState<string>('5'); // Default 5% slippage
   const [useJito, setUseJito] = useState<boolean>(true); // Default Jito enabled
+  const [jitoTip, setJitoTip] = useState<number | null>(null);
   const [showSlippageTooltip, setShowSlippageTooltip] = useState(false);
 
   // Ladder Buy modal state
@@ -291,9 +292,27 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
             if (data.type === 'auth_success') {
               console.log('🔐 WSS authentication successful for', data.clientType);
+
+              // Update Jito Tip if provided
+              if (data.jitoTip) {
+                setJitoTip(data.jitoTip);
+              }
+
               if (data.clientType === 'terminal') {
-                setWalletConnectionStatus('connected'); // Terminal authenticated, ready for wallet data
-                console.log('🔄 Terminal authenticated, set status to connected');
+                // Don't set to 'connected' yet - wait for wallet data response
+                console.log('🔄 Terminal authenticated, requesting wallet data to check wallet client status');
+                // Request wallet data immediately to check if wallet client is connected
+                const request = {
+                  requestId: `auth_${Date.now()}`,
+                  currentCoin: currentCoin
+                };
+                console.log('📤 Requesting wallet data after authentication:', request);
+                ws.send(JSON.stringify(request));
+              }
+
+            } else if (data.type === 'jito_tip_update') {
+              if (data.jitoTip) {
+                setJitoTip(data.jitoTip);
               }
 
             } else if (data.type === 'auth_failed') {
@@ -312,10 +331,13 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                 console.log('🎯 Auto-selected first wallet:', wallets[0].name);
               }
 
-              // Ensure status is connected when we have wallet data
+              // Set connection status based on wallet data
               if (wallets.length > 0) {
                 setWalletConnectionStatus('connected');
                 console.log('🔄 Set wallet connection status to connected (have wallets)');
+              } else {
+                setWalletConnectionStatus('disconnected');
+                console.log('🔄 Set wallet connection status to disconnected (no wallets - wallet client not connected)');
               }
             } else if (data.type === 'wallet_update') {
               console.log('📥 Received wallet update:', data);
@@ -363,18 +385,31 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                 setSelectedWallets([]);
               }
 
+              // Update connection status based on wallet count
+              if (newWallets.length > 0) {
+                setWalletConnectionStatus('connected');
+                console.log('🔄 Set wallet connection status to connected (received wallet update with wallets)');
+              } else {
+                setWalletConnectionStatus('disconnected');
+                console.log('🔄 Set wallet connection status to disconnected (received wallet update with no wallets)');
+              }
+
               console.log('✅ Wallet update complete. Total wallets:', newWallets.length);
             } else if (data.type === 'wallet_client_disconnected') {
               console.log('🔌 Received wallet client disconnection notification:', data);
               setWalletConnectionStatus('disconnected');
-              console.log('🔄 Updated wallet connection status to disconnected due to wallet client disconnect');
+              // Clear wallet data to prevent stale data from being displayed
+              setConnectedWallets([]);
+              setSelectedWallets([]);
+              console.log('🔄 Updated wallet connection status to disconnected and cleared wallet data');
             } else if (data.type === 'wallet_client_connected') {
               console.log('🔌 Received wallet client connection notification:', data);
+              // Update connection status to connected
+              setWalletConnectionStatus('connected');
               // Request wallet data when wallet client connects
               const request = {
                 type: 'wallet_data_request',
-                userId: operator?.userId?.toString() || 'unknown',
-                requestId: `wallet_connect_${Date.now()}`,
+                requestId: `refresh_${Date.now()}`,
                 currentCoin: currentCoin
               };
               console.log('📤 Requesting wallet data after wallet client connected:', request);
@@ -471,11 +506,17 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
           console.log('🔌 Disconnected from WSS server');
           setWssConnection(null);
           setWalletConnectionStatus('disconnected');
+          // Clear wallet data on WSS disconnect
+          setConnectedWallets([]);
+          setSelectedWallets([]);
         };
 
         ws.onerror = (error) => {
           console.error('WSS connection error:', error);
           setWalletConnectionStatus('disconnected');
+          // Clear wallet data on WSS error
+          setConnectedWallets([]);
+          setSelectedWallets([]);
         };
 
       } catch (error) {
@@ -523,6 +564,16 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   // Handle coin address from URL params
   React.useEffect(() => {
     const coinParam = searchParams.get('coin');
+
+    // Clear wallet state immediately when navigating to prevent stale data
+    // This happens before the new coin is set
+    if (coinParam && coinParam !== currentCoin) {
+      console.log(`🔄 Navigation detected: ${currentCoin} -> ${coinParam}, clearing wallet state`);
+      setConnectedWallets([]);
+      setSelectedWallets([]);
+      setWalletConnectionStatus('disconnected');
+    }
+
     if (coinParam) {
       setCurrentCoin(coinParam);
       localStorage.setItem('lastTradingCoin', coinParam);
@@ -532,7 +583,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         setCurrentCoin(lastCoin);
       }
     }
-  }, [searchParams]);
+  }, [searchParams, currentCoin]);
 
   // Fetch holders, pair info, token info, and traders when coin changes
   React.useEffect(() => {
@@ -550,6 +601,19 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       }
     }
   }, [currentCoin]);
+
+  // Request fresh wallet data when coin changes to ensure we have current wallet connection status
+  React.useEffect(() => {
+    if (wssConnection && wssConnection.readyState === WebSocket.OPEN && currentCoin) {
+      console.log(`🔄 Coin changed to ${currentCoin}, requesting fresh wallet data`);
+      const request = {
+        type: 'wallet_data_request',
+        requestId: `coin_change_${Date.now()}`,
+        currentCoin: currentCoin
+      };
+      wssConnection.send(JSON.stringify(request));
+    }
+  }, [currentCoin, wssConnection]);
 
   // Handle trade subscriptions
   React.useEffect(() => {
@@ -616,7 +680,6 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       if (currentCoin !== 'So11111111111111111111111111111112') { // Don't send for SOL
         const request = {
           type: 'wallet_data_request',
-          userId: operator?.userId?.toString() || 'unknown',
           requestId: `req_${Date.now()}`,
           currentCoin: currentCoin
         };
@@ -626,7 +689,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         console.log('⏭️ Skipping wallet request for SOL token');
       }
     }
-  }, [currentCoin, walletConnectionStatus, wssConnection, operator?.userId]);
+  }, [currentCoin, walletConnectionStatus, wssConnection]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsResizing(true);
@@ -992,7 +1055,6 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       // Request wallet data from WSS server
       const request = {
         type: 'wallet_data_request',
-        userId: operator?.userId?.toString() || 'unknown',
         requestId: `req_${Date.now()}`,
         currentCoin: currentCoin
       };
@@ -1140,6 +1202,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     slippage?: number;
     protocol?: 'v1' | 'amm'; // Default to v1
     pairAddress?: string; // For AMM tokens
+    useJito?: boolean;
   }): Promise<{
     success: boolean;
     instructions?: any[];
@@ -1157,14 +1220,15 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       const request = {
         type: 'build_pump_buy',
         requestId,
-        userId: operator?.userId?.toString() || 'unknown',
+        // userId: operator?.userId?.toString() || 'unknown', // Removed
         mintAddress: params.mintAddress,
         buyAmount: params.buyAmount,
         walletPublicKey: params.walletPublicKey,
         walletId: params.walletId, // Wallet ID for signing
         slippage: params.slippage || 1,
         protocol: params.protocol || 'v1', // Use detected protocol
-        pairAddress: params.pairAddress // For AMM tokens
+        pairAddress: params.pairAddress, // For AMM tokens
+        useJito: params.useJito || false
       };
 
       console.log('📤 Building Pump buy instructions:', request);
@@ -1223,6 +1287,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
     slippage?: number;
     protocol?: 'v1' | 'amm'; // Default to v1
     pairAddress?: string; // For AMM tokens
+    useJito?: boolean;
   }): Promise<{
     success: boolean;
     instructions?: any[];
@@ -1240,14 +1305,15 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       const request = {
         type: 'build_pump_sell',
         requestId,
-        userId: operator?.userId?.toString() || 'unknown',
+        // userId: operator?.userId?.toString() || 'unknown', // Removed
         mintAddress: params.mintAddress,
         tokenAmount: params.tokenAmount,
         walletPublicKey: params.walletPublicKey,
         walletId: params.walletId, // Wallet ID for signing
         slippage: params.slippage || 1,
         protocol: params.protocol || 'v1', // Use detected protocol
-        pairAddress: params.pairAddress // For AMM tokens
+        pairAddress: params.pairAddress, // For AMM tokens
+        useJito: params.useJito || false
       };
 
       console.log('📤 Building Pump sell instructions:', request);
@@ -1350,7 +1416,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
           walletId: walletId,
           slippage: parseFloat(slippage) || 5,
           protocol: protocolType || 'v1',
-          pairAddress: pairInfo?.pairAddress
+          pairAddress: pairInfo?.pairAddress,
+          useJito: useJito
         });
 
         if (!result.success) {
@@ -1425,7 +1492,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
           walletId: walletId,
           slippage: parseFloat(slippage) || 5,
           protocol: protocolType || 'v1',
-          pairAddress: pairInfo?.pairAddress
+          pairAddress: pairInfo?.pairAddress,
+          useJito: useJito
         });
 
         if (!result.success) {
@@ -1596,11 +1664,11 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
             style={{ height: `${chartHeight}%` }}
           >
             <iframe
-              key={currentCoin}
-              src={`https://birdeye.so/tv-widget/${currentCoin}?chain=solana&viewMode=pair&chartInterval=1&chartType=Candle&chartTimezone=Asia%2FBangkok&chartLeftToolbar=show&theme=dark`}
-              className="absolute top-0 left-0 w-full h-full rounded-md z-[1]"
-              style={{ border: 'none' }}
-              title="Trading Chart"
+              id="geckoterminal-embed"
+              title="GeckoTerminal Embed"
+              src={`https://www.geckoterminal.com/solana/pools/${currentCoin}?embed=1&info=0&swaps=0&light_chart=0&chart_type=market_cap&resolution=1m&bg_color=111827`}
+              allow="clipboard-write"
+              style={{ width: '100%', height: '100%' }}
             ></iframe>
             {(isResizingVertical || isResizing) && (
               <div className="absolute inset-0 z-[2] cursor-row-resize" />
@@ -2154,7 +2222,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                             walletId: wallet.id,
                                             slippage: parseFloat(slippage) || 5,
                                             protocol: protocolType || 'v1',
-                                            pairAddress: pairInfo?.pairAddress
+                                            pairAddress: pairInfo?.pairAddress,
+                                            useJito: useJito
                                           });
 
                                           if (!result.success) {
@@ -2369,8 +2438,13 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                       onChange={(e) => setUseJito(e.target.checked)}
                       className="w-3 h-3 rounded border border-green-500/30 bg-black/60 text-green-400 focus:ring-green-400 focus:ring-2"
                     />
-                    <label htmlFor="useJito" className="text-green-300/80 text-xs font-mono cursor-pointer">
+                    <label htmlFor="useJito" className="text-green-300/80 text-xs font-mono cursor-pointer flex items-center gap-1">
                       Jito
+                      {jitoTip && (
+                        <span className="text-green-500/60 text-[10px] ml-1">
+                          (Tips: {jitoTip.toFixed(4)} SOL)
+                        </span>
+                      )}
                     </label>
                   </div>
                 </div>
@@ -2449,7 +2523,10 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                           walletId: selectedWallet.id,
                           slippage: parseFloat(slippage) || 5,
                           protocol: protocolType || 'v1',
-                          pairAddress: pairInfo?.pairAddress
+                          pairAddress: pairInfo?.pairAddress,
+                          useJito: useJito,
+                          // @ts-ignore - Dynamic tip update
+                          jitoTipAmount: jitoTip // Pass dynamic tip if available
                         });
 
                         if (!result.success) {
@@ -2505,7 +2582,10 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                           walletId: selectedWallet.id,
                           slippage: parseFloat(slippage) || 5,
                           protocol: protocolType || 'v1',
-                          pairAddress: pairInfo?.pairAddress
+                          pairAddress: pairInfo?.pairAddress,
+                          useJito: useJito,
+                          // @ts-ignore - Dynamic tip update
+                          jitoTipAmount: jitoTip
                         });
 
                         if (!result.success) {
@@ -2604,7 +2684,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
                     const request = {
                       type: 'nuke_request',
-                      userId: operator?.userId?.toString() || 'unknown',
+                      // userId: operator?.userId?.toString() || 'unknown', // Removed
                       requestId: `nuke_${Date.now()}`,
                       mintAddress: currentCoin,
                       protocol: protocolType || 'v1', // Default to v1 if unknown
@@ -2728,6 +2808,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
               slippage={slippage}
               protocolType={protocolType}
               pairInfo={pairInfo}
+              accountId={operator?.accountId?.toString() || ''}
+              jitoTip={jitoTip}
             />
 
             {/* Ladder Sell Modal */}
@@ -2747,6 +2829,8 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
               slippage={slippage}
               protocolType={protocolType}
               pairInfo={pairInfo}
+              accountId={operator?.accountId?.toString() || ''}
+              jitoTip={jitoTip}
             />
 
             {/* Bundle Buy Modal */}
@@ -2763,10 +2847,11 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
               onRestore={handleBundleBuyRestore}
               mintAddress={currentCoin}
               wssConnection={wssConnection}
-              operator={operator}
+              accountId={operator?.accountId?.toString() || ''}
               slippage={slippage}
               protocolType={protocolType}
               pairAddress={pairInfo?.pairAddress}
+              jitoTip={jitoTip}
             />
 
             {/* Gather SOL Modal */}
@@ -2780,7 +2865,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
               onMinimize={handleGatherSolMinimize}
               onRestore={handleGatherSolRestore}
               wssConnection={wssConnection}
-              userId={operator?.userId?.toString() || ''}
+              accountId={operator?.accountId?.toString() || ''}
             />
 
             {/* Distribute SOL Modal */}
@@ -2794,7 +2879,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
               onMinimize={handleDistributeSolMinimize}
               onRestore={handleDistributeSolRestore}
               wssConnection={wssConnection}
-              userId={operator?.userId?.toString() || ''}
+              accountId={operator?.accountId?.toString() || ''}
             />
 
             {/* Warm Up Wallet Modal */}

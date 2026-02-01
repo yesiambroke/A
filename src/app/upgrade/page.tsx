@@ -9,11 +9,17 @@ export const metadata: Metadata = {
 const UpgradeRoute = async () => {
   const session = await getSessionFromCookies();
 
-  const operator = session ? {
-    userId: session.userId,
-    tier: session.tier,
+  if (!session) {
+    const { redirect } = await import("next/navigation");
+    redirect("/auth/login");
+    return null; // unreachable but satisfies TS
+  }
+
+  const operator = {
+    accountId: session.accountId,
+    userTier: session.tier,
     is2faEnabled: session.is2faEnabled,
-  } : null;
+  };
 
   return (
     <div className="min-h-screen bg-black px-1 py-1 sm:px-3 sm:py-2 font-mono text-green-400">

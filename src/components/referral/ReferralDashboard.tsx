@@ -3,6 +3,8 @@
 import React from "react";
 import Link from "next/link";
 
+import PayoutRequestModal from "./PayoutRequestModal";
+
 type UserInfo = {
   userId: number;
   tier: string;
@@ -25,23 +27,49 @@ type ReferralData = {
   proPurchasedAt: string | null;
 };
 
+type PayoutRequest = {
+  payoutId: number;
+  amount: number;
+  status: string;
+  requestedAt: string;
+  processedAt?: string;
+  solTxHash?: string;
+  rejectionReason?: string;
+};
+
 const ReferralDashboard = () => {
   const [referralData, setReferralData] = React.useState<ReferralData | null>(null);
+  const [payoutHistory, setPayoutHistory] = React.useState<PayoutRequest[]>([]);
   const [generatingCode, setGeneratingCode] = React.useState(false);
+  const [showPayoutModal, setShowPayoutModal] = React.useState(false);
+
+  const fetchReferralData = async () => {
+    try {
+      const res = await fetch("/api/referrals");
+      const data = await res.json();
+      if (data.success) {
+        setReferralData(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch referral data:", error);
+    }
+  };
+
+  const fetchPayoutHistory = async () => {
+    try {
+      const res = await fetch("/api/referrals/payout/history");
+      const data = await res.json();
+      if (data.success) {
+        setPayoutHistory(data.payouts);
+      }
+    } catch (error) {
+      console.error("Failed to fetch payout history:", error);
+    }
+  };
 
   React.useEffect(() => {
-    const fetchReferralData = async () => {
-      try {
-        const res = await fetch("/api/referrals");
-        const data = await res.json();
-        if (data.success) {
-          setReferralData(data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch referral data:", error);
-      }
-    };
     fetchReferralData();
+    fetchPayoutHistory();
   }, []);
 
   const generateReferralCode = async () => {
@@ -112,13 +140,13 @@ const ReferralDashboard = () => {
                     >
                       Copy Link
                     </button>
-                      <button
-                        type="button"
-                        onClick={() => referralData.referralCode && navigator.clipboard.writeText(referralData.referralCode)}
-                        className="flex-1 border border-green-500 px-3 py-2 text-green-200 hover:bg-green-500/10"
-                      >
-                        Copy Code
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => referralData.referralCode && navigator.clipboard.writeText(referralData.referralCode)}
+                      className="flex-1 border border-green-500 px-3 py-2 text-green-200 hover:bg-green-500/10"
+                    >
+                      Copy Code
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -149,9 +177,18 @@ const ReferralDashboard = () => {
                 <span className="text-green-500/80">Successful:</span>
                 <span className="font-semibold text-green-200">{referralData.successfulReferrals}</span>
               </div>
-              <div className="flex justify-between border border-green-500/20 px-2 py-1">
+              <div className="flex justify-between border border-green-500/20 px-2 py-1 items-center">
                 <span className="text-green-500/80">Rewards Balance:</span>
-                <span className="font-semibold text-green-200">{referralData.referralBalance} SOL</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-green-200">{referralData.referralBalance} SOL</span>
+                  <button
+                    onClick={() => setShowPayoutModal(true)}
+                    disabled={referralData.referralBalance < 1}
+                    className="text-[10px] bg-green-600 hover:bg-green-500 text-black px-2 py-0.5 rounded font-bold disabled:opacity-50"
+                  >
+                    Withdraw
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -160,7 +197,10 @@ const ReferralDashboard = () => {
         </div>
 
         <div className="border border-green-500/40 bg-black/85 p-4 space-y-3 lg:col-span-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-green-400/70">Referral History</p>
+          <div className="flex gap-4 border-b border-green-500/20 pb-2 mb-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-green-400/70">Referral History</p>
+          </div>
+
           {referralData ? (
             referralData.referrals.length > 0 ? (
               <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -169,11 +209,10 @@ const ReferralDashboard = () => {
                     <div className="flex justify-between items-start">
                       <div>
                         <span className="text-green-300">Referee #{ref.referee_account_id}</span>
-                        <span className={`ml-2 px-1 py-0.5 text-xs border ${
-                          ref.status === 'completed' || ref.status === 'paid'
+                        <span className={`ml-2 px-1 py-0.5 text-xs border ${ref.status === 'completed' || ref.status === 'paid'
                             ? 'border-green-500 text-green-300'
                             : 'border-yellow-500 text-yellow-300'
-                        }`}>
+                          }`}>
                           {ref.status}
                         </span>
                       </div>
@@ -194,7 +233,58 @@ const ReferralDashboard = () => {
             <p className="text-sm text-green-500/80">Loading...</p>
           )}
         </div>
+
+        {payoutHistory.length > 0 && (
+          <div className="border border-green-500/40 bg-black/85 p-4 space-y-3 lg:col-span-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-green-400/70">Payout History</p>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {payoutHistory.map((payout) => (
+                <div key={payout.payoutId} className="border border-green-500/20 p-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-300 font-bold">{payout.amount} SOL</span>
+                        <span className={`px-1.5 py-0.5 text-[10px] uppercase border ${payout.status === 'completed'
+                            ? 'border-green-500 text-green-400'
+                            : payout.status === 'rejected'
+                              ? 'border-red-500 text-red-400'
+                              : 'border-yellow-500 text-yellow-400'
+                          }`}>
+                          {payout.status}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">
+                        {new Date(payout.requestedAt).toLocaleString()}
+                        {payout.rejectionReason && <span className="text-red-400 ml-2">- {payout.rejectionReason}</span>}
+                      </div>
+                    </div>
+                    {payout.solTxHash && (
+                      <a
+                        href={`https://solscan.io/tx/${payout.solTxHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-green-500 hover:text-green-400 underline"
+                      >
+                        View TX
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      <PayoutRequestModal
+        isOpen={showPayoutModal}
+        onClose={() => setShowPayoutModal(false)}
+        balance={referralData?.referralBalance || 0}
+        onSuccess={() => {
+          fetchReferralData();
+          fetchPayoutHistory();
+        }}
+      />
     </div>
   );
 };

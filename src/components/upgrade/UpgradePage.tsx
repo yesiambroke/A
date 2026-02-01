@@ -4,11 +4,10 @@ import React from "react";
 import PageHeader from "@/components/shared/PageHeader";
 import ProBenefits from "@/components/upgrade/ProBenefits";
 import PricingDisplay from "@/components/upgrade/PricingDisplay";
-import UpgradeButton from "@/components/upgrade/UpgradeButton";
 
 type OperatorProps = {
-  userId: number;
-  tier: string;
+  accountId: string;
+  userTier: string;
   is2faEnabled: boolean;
 };
 
@@ -112,7 +111,6 @@ const UpgradePage = ({ operator }: UpgradePageProps) => {
         {/* Pricing and Upgrade */}
         <div className="max-w-md mx-auto space-y-4">
           <PricingDisplay operator={operator} />
-          <UpgradeButton operator={operator} />
         </div>
       </div>
     </div>

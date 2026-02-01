@@ -13,7 +13,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="font-mono">{children}</body>
+      <body className="font-mono">
+        {children}
+      </body>
     </html>
   );
 }

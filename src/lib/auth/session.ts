@@ -23,16 +23,24 @@ export const getSessionFromRequest = async (request: NextRequest): Promise<Sessi
     return null;
   }
 
-  // Check if session is still active in database
+  // Check if session is still active in database and fetch fresh user data
   try {
     const { rows } = await query(
-      `SELECT 1 FROM active_sessions WHERE active_session_id = $1 AND user_id = $2`,
+      `SELECT a.active_session_id, u.account_id, u.user_tier, u.is_2fa_enabled 
+       FROM active_sessions a
+       JOIN users u ON a.user_id = u.user_id
+       WHERE a.active_session_id = $1 AND a.user_id = $2`,
       [payload.sessionId, payload.userId]
     );
 
     if (rows.length === 0) {
       return null; // Session revoked or expired
     }
+
+    // Update payload with fresh data
+    payload.accountId = rows[0].account_id;
+    payload.tier = rows[0].user_tier;
+    payload.is2faEnabled = rows[0].is_2fa_enabled;
   } catch (error) {
     console.error("Error checking session validity:", error);
     return null;
@@ -52,16 +60,24 @@ export const getSessionFromCookies = async (): Promise<SessionPayload | null> =>
     return null;
   }
 
-  // Check if session is still active in database
+  // Check if session is still active in database and fetch fresh user data
   try {
     const { rows } = await query(
-      `SELECT 1 FROM active_sessions WHERE active_session_id = $1 AND user_id = $2`,
+      `SELECT a.active_session_id, u.account_id, u.user_tier, u.is_2fa_enabled 
+       FROM active_sessions a
+       JOIN users u ON a.user_id = u.user_id
+       WHERE a.active_session_id = $1 AND a.user_id = $2`,
       [payload.sessionId, payload.userId]
     );
 
     if (rows.length === 0) {
       return null; // Session revoked or expired
     }
+
+    // Update payload with fresh data
+    payload.accountId = rows[0].account_id;
+    payload.tier = rows[0].user_tier;
+    payload.is2faEnabled = rows[0].is_2fa_enabled;
   } catch (error) {
     console.error("Error checking session validity:", error);
     return null;

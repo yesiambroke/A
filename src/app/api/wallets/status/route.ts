@@ -27,7 +27,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       connected: false, // Will be true when wallet client is actually connected
       wallets: [], // Will contain actual connected wallets
-      userId: session.userId
     });
 
   } catch (error) {

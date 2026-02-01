@@ -21,7 +21,7 @@ interface GatherSolModalProps {
   onMinimize?: () => void;
   onRestore?: () => void;
   wssConnection: WebSocket | null;
-  userId: string;
+  accountId?: string;
 }
 
 const GatherSolModal: React.FC<GatherSolModalProps> = ({
@@ -34,7 +34,7 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
   onMinimize,
   onRestore,
   wssConnection,
-  userId
+  accountId
 }) => {
   // Utility function for formatting numbers
   const formatCompact = (value: number | null | undefined, decimals = 1) => {
@@ -122,7 +122,6 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
     // Backend will handle packing 7 transfers per tx and 5 txs per bundle (35 wallets/bundle)
     const payload = {
       type: 'gather_sol_request',
-      userId: userId,
       requestId: requestId,
       wallets: senderWallets, // Send ALL wallets
       receiver: receiverWalletId
@@ -274,8 +273,8 @@ const GatherSolModal: React.FC<GatherSolModalProps> = ({
                         {/* Role Indicator */}
                         <div className="flex items-center gap-1">
                           <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${isReceiver
-                              ? 'bg-cyan-500/20 text-cyan-300'
-                              : 'bg-gray-500/20 text-gray-400'
+                            ? 'bg-cyan-500/20 text-cyan-300'
+                            : 'bg-gray-500/20 text-gray-400'
                             }`}>
                             {isReceiver ? '🎯 Receiver' : 'Sender'}
                           </span>
