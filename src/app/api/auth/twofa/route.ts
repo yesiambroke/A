@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       qrCodeUrl = await qrcode.toDataURL(generated.otpauth_url);
     }
 
-    let rows: { user_tier: string }[];
+    let rows: { user_tier: string; account_id: string }[];
 
     if (payload.enabled) {
       // Setup: verify TG code first
@@ -64,11 +64,11 @@ export async function POST(request: NextRequest) {
       );
 
       // Store secret but don't enable yet
-      const result = await query<{ user_tier: string }>(
+      const result = await query<{ user_tier: string; account_id: string }>(
         `UPDATE users
          SET google_2fa_secret = $1
          WHERE user_id = $2
-         RETURNING user_tier`,
+         RETURNING user_tier, account_id`,
         [secret, session.userId]
       );
       rows = result.rows;
@@ -122,11 +122,11 @@ export async function POST(request: NextRequest) {
       );
 
       // Clear secret, disable 2FA, and invalidate recovery key
-      const result = await query<{ user_tier: string }>(
+      const result = await query<{ user_tier: string; account_id: string }>(
         `UPDATE users
          SET is_2fa_enabled = false, google_2fa_secret = NULL, recovery_key_used = true
          WHERE user_id = $1
-         RETURNING user_tier`,
+         RETURNING user_tier, account_id`,
         [session.userId]
       );
       rows = result.rows;
@@ -147,6 +147,7 @@ export async function POST(request: NextRequest) {
 
     const refreshedJwt = createSessionJwt({
       userId: session.userId,
+      accountId: rows[0].account_id,
       tier: rows[0].user_tier,
       is2faEnabled: payload.enabled,
       sessionId: session.sessionId,

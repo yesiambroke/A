@@ -11,26 +11,26 @@ type PromoteMetadata = {
 
 type PromoteResult =
   | {
-      requires2fa: true;
-      user: {
-        userId: number;
-        tier: string;
-        is2faEnabled: boolean;
-      };
-    }
-  | {
-      jwtToken: string;
-      websocketUrl: string;
-      user: {
-        userId: number;
-        tier: string;
-        is2faEnabled: boolean;
-      };
-      session: {
-        activeSessionId: string;
-        expiresAt: string;
-      };
+    requires2fa: true;
+    user: {
+      userId: number;
+      tier: string;
+      is2faEnabled: boolean;
     };
+  }
+  | {
+    jwtToken: string;
+    websocketUrl: string;
+    user: {
+      userId: number;
+      tier: string;
+      is2faEnabled: boolean;
+    };
+    session: {
+      activeSessionId: string;
+      expiresAt: string;
+    };
+  };
 
 const fetchSession = async (client: PoolClient, token: string) => {
   const { rows } = await client.query<{
@@ -40,8 +40,9 @@ const fetchSession = async (client: PoolClient, token: string) => {
     expires_at: string;
     user_tier: string;
     is_2fa_enabled: boolean;
+    account_id: string;
   }>(
-    `SELECT s.session_id, s.user_id, s.used, s.expires_at, u.user_tier, u.is_2fa_enabled
+    `SELECT s.session_id, s.user_id, s.used, s.expires_at, u.user_tier, u.is_2fa_enabled, u.account_id
      FROM one_time_sessions s
      JOIN users u ON s.user_id = u.user_id
      WHERE s.session_token = $1
@@ -97,8 +98,8 @@ export const promoteSessionAfter2fa = async (
 ): Promise<PromoteResultSuccess> => {
   return withTransaction(async (client) => {
     // Verify 2FA code
-    const { rows: userRows } = await client.query<{ user_tier: string; is_2fa_enabled: boolean; google_2fa_secret: string }>(
-      `SELECT user_tier, is_2fa_enabled, google_2fa_secret FROM users WHERE user_id = $1`,
+    const { rows: userRows } = await client.query<{ user_tier: string; is_2fa_enabled: boolean; google_2fa_secret: string; account_id: string }>(
+      `SELECT user_tier, is_2fa_enabled, google_2fa_secret, account_id FROM users WHERE user_id = $1`,
       [userId]
     );
 
@@ -137,6 +138,7 @@ export const promoteSessionAfter2fa = async (
 
     const jwtToken = createSessionJwt({
       userId,
+      accountId: user.account_id,
       tier: user.user_tier,
       is2faEnabled: user.is_2fa_enabled,
       sessionId: activeRows[0].active_session_id,
@@ -239,6 +241,7 @@ export const promoteSessionToken = async (
 
     const jwtToken = createSessionJwt({
       userId: session.user_id,
+      accountId: session.account_id,
       tier: session.user_tier,
       is2faEnabled: session.is_2fa_enabled,
       sessionId: activeRows[0].active_session_id,

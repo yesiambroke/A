@@ -13,7 +13,7 @@ const axios = require('axios');
 require('dotenv').config({ path: '../../.env.local' });
 
 // Jito Configuration
-const JITO_PROXY_URL = 'https://sendtransaction.apteka.wtf';
+const JITO_PROXY_URL = process.env.JITO_PROXY_URL || 'https://sendtransaction.apteka.wtf';
 const JITO_ENDPOINTS = [
   'amsterdam',
   'mainnet',
@@ -31,8 +31,8 @@ const TRADING_FEES = {
   pro: 0.00222    // 0.222%
 };
 
-const FEE_RECIPIENT = 'A1zZVRgsJxopzezzsfrB45QQzMW4Tf9HiYWUbx6qzZ3W';
-const JITO_TIP_ADDRESS = '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5';
+const FEE_RECIPIENT = process.env.FEE_RECIPIENT || 'A1zZVRgsJxopzezzsfrB45QQzMW4Tf9HiYWUbx6qzZ3W';
+const JITO_TIP_ADDRESS = process.env.JITO_TIP_ADDRESS || '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5';
 
 class WalletWSSServer {
   constructor(port = 4128) {
@@ -55,7 +55,7 @@ class WalletWSSServer {
 
     // Initialize Solana connection
     this.solanaConnection = new Connection(
-      'https://mainnet.helius-rpc.com/?api-key=0a9623d2-dc37-4918-ac67-534e81ba893a',
+      process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=0a9623d2-dc37-4918-ac67-534e81ba893a',
       'confirmed'
     );
 
