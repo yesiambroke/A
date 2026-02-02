@@ -414,7 +414,8 @@ export default function LandingPage() {
                 {/* macOS Apple Silicon */}
                 <div className="border border-green-500/30 bg-gray-900/50 p-4 sm:p-6 hover:border-green-500/50 transition-colors flex flex-col items-center">
                   <a
-                    href="#"
+                    href="/downloads/A-Wallet_0.1.0_aarch64.dmg"
+                    download
                     className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-green-500 text-black font-bold text-sm hover:bg-green-400 border-2 border-green-500 text-center transition-colors group"
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
@@ -430,7 +431,8 @@ export default function LandingPage() {
                 {/* macOS Intel */}
                 <div className="border border-green-500/30 bg-gray-900/50 p-4 sm:p-6 hover:border-green-500/50 transition-colors flex flex-col items-center">
                   <a
-                    href="#"
+                    href="/downloads/A-Wallet_0.1.0_x64.dmg"
+                    download
                     className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-green-500 text-black font-bold text-sm hover:bg-green-400 border-2 border-green-500 text-center transition-colors group"
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
@@ -446,7 +448,8 @@ export default function LandingPage() {
                 {/* Windows x64 */}
                 <div className="border border-green-500/30 bg-gray-900/50 p-4 sm:p-6 hover:border-green-500/50 transition-colors flex flex-col items-center">
                   <a
-                    href="#"
+                    href="/downloads/A-Wallet_0.1.0_x64_en-US.msi"
+                    download
                     className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-green-500 text-black font-bold text-sm hover:bg-green-400 border-2 border-green-500 text-center transition-colors group"
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
