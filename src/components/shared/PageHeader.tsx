@@ -56,7 +56,7 @@ type PageHeaderProps = {
 
 const PageHeader = ({ currentPage, operator }: PageHeaderProps) => {
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [telegramUrl, setTelegramUrl] = React.useState('https://t.me/a_trade_dot_fun_bot');
+  const [telegramUrl, setTelegramUrl] = React.useState('https://t.me/a_trade_fun_bot');
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   // Search state
@@ -76,7 +76,7 @@ const PageHeader = ({ currentPage, operator }: PageHeaderProps) => {
   // Set Telegram URL with referral code on client side
   React.useEffect(() => {
     const refCode = localStorage.getItem('referralCode');
-    const baseUrl = 'https://t.me/a_trade_dot_fun_bot';
+    const baseUrl = 'https://t.me/a_trade_fun_bot';
     setTelegramUrl(refCode ? `${baseUrl}?start=${refCode}` : baseUrl);
   }, []);
 

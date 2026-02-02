@@ -1664,11 +1664,11 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
             style={{ height: `${chartHeight}%` }}
           >
             <iframe
-              id="geckoterminal-embed"
-              title="GeckoTerminal Embed"
-              src={`https://www.geckoterminal.com/solana/pools/${currentCoin}?embed=1&info=0&swaps=0&light_chart=0&chart_type=market_cap&resolution=1m&bg_color=111827`}
-              allow="clipboard-write"
-              style={{ width: '100%', height: '100%' }}
+              key={currentCoin}
+              src={`https://birdeye.so/tv-widget/${currentCoin}?chain=solana&viewMode=pair&chartInterval=1&chartType=Candle&chartTimezone=Etc%2FUTC&chartLeftToolbar=show&theme=dark`}
+              className="absolute top-0 left-0 w-full h-full rounded-md z-[1]"
+              style={{ border: 'none' }}
+              title="Trading Chart"
             ></iframe>
             {(isResizingVertical || isResizing) && (
               <div className="absolute inset-0 z-[2] cursor-row-resize" />
@@ -1876,16 +1876,10 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                     className="text-gray-400 hover:text-green-400 transition-colors"
                                     title="View on Solscan"
                                   >
-                                    <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <g clipPath="url(#clip0_trades)">
-                                        <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor" />
-                                        <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3" />
-                                      </g>
-                                      <defs>
-                                        <clipPath id="clip0_trades">
-                                          <rect width="316" height="315" fill="white" />
-                                        </clipPath>
-                                      </defs>
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                      <polyline points="15 3 21 3 21 9" />
+                                      <line x1="10" y1="14" x2="21" y2="3" />
                                     </svg>
                                   </a>
                                 </div>
@@ -1909,16 +1903,10 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                     className="text-gray-400 hover:text-green-400 transition-colors"
                                     title="View transaction on Solscan"
                                   >
-                                    <svg width="16" height="16" viewBox="0 0 316 315" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <g clipPath="url(#clip0_tx)">
-                                        <path d="M157.501 -0.375009C158.243 -0.3738 158.986 -0.372592 159.751 -0.371347C200.901 -0.19058 238.327 15.5969 268.001 44C268.795 44.7309 269.589 45.4618 270.407 46.2148C299.639 74.0132 314.085 114.372 316.001 154C316.043 154.866 316.086 155.732 316.129 156.625C317.036 195.299 303.157 231.777 277.001 260C272.034 255.884 267.588 251.579 263.251 246.812C258.943 242.131 254.59 237.533 250.063 233.062C245.827 228.877 241.829 224.56 238.001 220C239.494 215.902 241.505 212.358 243.751 208.625C258.049 184.089 261.052 157.294 253.876 130C247.036 105.774 231.076 84.526 209.251 71.875C185.025 58.3674 158.112 53.5756 131.001 61C105.763 68.7927 83.7433 84.5134 70.9019 108.01C58.1815 132.403 54.1314 159.243 62.1256 185.875C70.2872 211.566 87.1832 233.11 111.001 246C136.273 258.52 161.194 259.401 188.125 252.452C190.247 251.941 192.193 251.796 194.376 251.75C195.47 251.711 195.47 251.711 196.587 251.672C203.77 252.648 208.21 257.811 213.024 262.73C213.77 263.481 214.516 264.231 215.285 265.004C217.656 267.392 220.016 269.789 222.376 272.188C223.986 273.813 225.596 275.437 227.208 277.061C231.147 281.033 235.077 285.013 239.001 289C237.172 293.096 234.662 294.969 230.938 297.312C230.016 297.897 230.016 297.897 229.075 298.493C208.561 311.04 185.304 315.442 161.563 315.375C160.771 315.374 159.978 315.373 159.162 315.371C119.658 315.208 81.7949 301.088 52.0006 275C51.1511 274.283 50.3016 273.567 49.4264 272.828C43.1832 267.436 38.0125 261.54 33.0006 255C32.3212 254.125 31.6419 253.249 30.942 252.348C14.9048 231.058 4.95175 206.294 1.00058 180C0.816245 178.802 0.631909 177.605 0.441987 176.371C-4.60214 134.33 7.93634 92.1714 33.7896 58.9648C59.598 26.653 96.2021 6.05584 137.122 0.414542C143.913 -0.311258 150.679 -0.395715 157.501 -0.375009Z" fill="currentColor" />
-                                        <path d="M197.996 108.172C209.455 118.008 217.931 131.94 220 147C221.423 167.213 218.076 184.808 204.625 200.5C192.888 212.619 177.288 219.847 160.402 220.354C142.737 220.513 127.002 215.572 114.062 203.26C101.611 190.821 95.117 175.085 94.625 157.5C95.1486 140.845 100.967 125.086 112.727 113.105C137.096 90.5362 171.111 88.6825 197.996 108.172Z" fill="#C74AE3" />
-                                      </g>
-                                      <defs>
-                                        <clipPath id="clip0_tx">
-                                          <rect width="316" height="315" fill="white" />
-                                        </clipPath>
-                                      </defs>
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                      <polyline points="15 3 21 3 21 9" />
+                                      <line x1="10" y1="14" x2="21" y2="3" />
                                     </svg>
                                   </a>
                                 </div>
@@ -1969,12 +1957,36 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                 const percentage = ((holder.tokenBalance / totalSupply) * 100).toFixed(2);
                                 return (
                                   <tr key={holder.walletAddress} className="hover:bg-green-500/5">
-                                    <td className="px-3 py-2 whitespace-nowrap text-green-300/70 font-mono">
-                                      <span className="inline-flex items-center">
-                                        {holder.walletAddress.slice(0, 6)}...{holder.walletAddress.slice(-4)}
-                                        {holder.isInsider && <span className="ml-1 text-yellow-400 inline-block">{CustomIcons.insider}</span>}
-                                        {holder.isBundler && <span className="ml-1 text-red-400 inline-block">{CustomIcons.bundler}</span>}
-                                      </span>
+                                    <td className="px-3 py-2 whitespace-nowrap text-white font-mono">
+                                      <div className="flex items-center gap-1.5">
+                                        <span
+                                          className="cursor-pointer hover:text-green-400 transition-colors"
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(holder.walletAddress);
+                                            showToast("Address copied");
+                                          }}
+                                          title="Click to copy address"
+                                        >
+                                          {holder.walletAddress.slice(0, 6)}...{holder.walletAddress.slice(-4)}
+                                        </span>
+                                        <div className="flex items-center gap-1">
+                                          <a
+                                            href={`https://solscan.io/account/${holder.walletAddress}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-gray-500 hover:text-green-400 transition-colors"
+                                            title="View on Solscan"
+                                          >
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                              <polyline points="15 3 21 3 21 9" />
+                                              <line x1="10" y1="14" x2="21" y2="3" />
+                                            </svg>
+                                          </a>
+                                          {holder.isInsider && <span className="text-yellow-400 inline-block">{CustomIcons.insider}</span>}
+                                          {holder.isBundler && <span className="text-red-400 inline-block">{CustomIcons.bundler}</span>}
+                                        </div>
+                                      </div>
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap text-green-400 font-semibold">
                                       {formatCompact(holder.tokenBalance, 1)}
@@ -1995,14 +2007,31 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                     </div>
 
                     {/* Bubble Map Section */}
-                    <div className="flex-1 border border-green-500/20 rounded overflow-hidden bg-black/50">
-                      <iframe
-                        src={`https://iframe.bubblemaps.io/map?address=${currentCoin}&chain=solana&partnerId=demo`}
-                        className="w-full h-full"
-                        style={{ border: 'none' }}
-                        title="Bubble Map"
-                        allowFullScreen
-                      />
+                    <div className="flex-1 border border-green-500/20 rounded overflow-hidden bg-black/50 flex flex-col items-center justify-center p-6 text-center">
+                      <div className="w-16 h-16 mb-4 rounded-full bg-green-500/10 flex items-center justify-center border border-green-500/30">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 text-green-500">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                          <circle cx="8" cy="8" r="3" fill="currentColor" />
+                          <circle cx="16" cy="14" r="4" fill="currentColor" opacity="0.7" />
+                          <circle cx="10" cy="16" r="2" fill="currentColor" opacity="0.5" />
+                          <path d="M8 8 L16 14 M16 14 L10 16 M10 16 L8 8" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+                        </svg>
+                      </div>
+                      <h4 className="text-green-400 font-bold mb-2">BUBBLE MAP DATA</h4>
+                      <p className="text-green-500/60 text-[10px] sm:text-xs mb-6 max-w-[200px] sm:max-w-xs">
+                        Visualize holders and potential wallet clusters for this token on Bubblemaps.
+                      </p>
+                      <a
+                        href={`https://v2.bubblemaps.io/map?address=${currentCoin}&chain=solana&limit=80`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-6 py-2.5 bg-green-500 text-black font-bold text-xs hover:bg-green-400 transition-all active:scale-95 flex items-center gap-2"
+                      >
+                        VIEW ON BUBBLEMAPS
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
                     </div>
                   </div>
                 </div>
@@ -2040,13 +2069,37 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                             const pnl = trader.usdSold - trader.usdInvested;
                             return (
                               <tr key={trader.walletAddress} className="hover:bg-green-500/5">
-                                <td className="px-3 py-2 whitespace-nowrap text-green-300/70 font-mono">
-                                  <span className="inline-flex items-center">
-                                    {trader.walletAddress.slice(0, 6)}...{trader.walletAddress.slice(-4)}
-                                    {trader.isInsider && <span className="ml-1 text-yellow-400 inline-block">{CustomIcons.insider}</span>}
-                                    {trader.isBundler && <span className="ml-1 text-red-400 inline-block">{CustomIcons.bundler}</span>}
-                                    {trader.isSniper && <span className="ml-1 text-red-400 inline-block">{CustomIcons.sniper}</span>}
-                                  </span>
+                                <td className="px-3 py-2 whitespace-nowrap text-white font-mono">
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className="cursor-pointer hover:text-green-400 transition-colors"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(trader.walletAddress);
+                                        showToast("Address copied");
+                                      }}
+                                      title="Click to copy address"
+                                    >
+                                      {trader.walletAddress.slice(0, 6)}...{trader.walletAddress.slice(-4)}
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <a
+                                        href={`https://solscan.io/account/${trader.walletAddress}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-gray-500 hover:text-green-400 transition-colors"
+                                        title="View on Solscan"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                          <polyline points="15 3 21 3 21 9" />
+                                          <line x1="10" y1="14" x2="21" y2="3" />
+                                        </svg>
+                                      </a>
+                                      {trader.isInsider && <span className="text-yellow-400 inline-block">{CustomIcons.insider}</span>}
+                                      {trader.isBundler && <span className="text-red-400 inline-block">{CustomIcons.bundler}</span>}
+                                      {trader.isSniper && <span className="text-red-400 inline-block">{CustomIcons.sniper}</span>}
+                                    </div>
+                                  </div>
                                 </td>
                                 <td className="px-3 py-2 whitespace-nowrap text-green-400 font-semibold">
                                   {trader.buyTransactions}
@@ -2090,7 +2143,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                           <p>Sign in with Telegram to access all trading features.</p>
                         </div>
                         <a
-                          href="/login"
+                          href="https://t.me/a_trade_fun_bot"
                           className="inline-block px-6 py-3 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
                         >
                           Sign Up Now
@@ -2285,7 +2338,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   <p>Create your account to access powerful trading tools and start building your portfolio.</p>
                 </div>
                 <a
-                  href="/login"
+                  href="https://t.me/a_trade_fun_bot"
                   className="inline-block px-6 py-3 border border-green-500/40 rounded bg-green-500/10 text-green-100 font-mono text-sm hover:bg-green-500/20 transition-colors"
                 >
                   Get Started

@@ -39,10 +39,9 @@ const features = [
         <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
     ),
-    title: 'Self-Hosted Private Keys',
-    desc: 'Full control with self-hosted private key management',
-    cmd: '> security --self-hosted=true',
-    badge: 'Soon'
+    title: 'Native Non-Custodial Wallet',
+    desc: 'Full control, designed for our trading ecosystem.',
+    cmd: '> wallet --type=non-custodial'
   },
   {
     icon: (
@@ -51,8 +50,8 @@ const features = [
       </svg>
     ),
     title: 'Low Trading Fees',
-    desc: 'Competitive 0.444% trading fees on all transactions',
-    cmd: '> fees --rate=0.444%'
+    desc: 'Enjoy low trading fees — as low as 0.222%',
+    cmd: '> fees --pro=0.222% --basic=0.444%'
   },
   {
     icon: (
@@ -63,7 +62,7 @@ const features = [
     ),
     title: 'Easy Multi Wallet Control',
     desc: 'Manage up to 100 active wallets simultaneously',
-    cmd: '> wallet --max=50'
+    cmd: '> wallet --max=100'
   },
   {
     icon: (
@@ -79,24 +78,24 @@ const features = [
 ]
 
 const steps = [
-  { step: '01', title: 'Get Started', desc: 'Authenticate via Telegram bot to receive your secure access token', cmd: '$ tg --bot @a_trade_dot_fun_bot' },
-  { step: '02', title: 'Backup Recovery Key', desc: 'Save your account recovery key securely - you\'ll need it to regain access if you lose your device', cmd: '$ backup --recovery-key' },
-  { step: '03', title: 'Find Opportunities', desc: 'Browse and analyze PumpFun meme coins with real-time analytics', cmd: '$ scan --platform=pumpfun' },
-  { step: '04', title: 'Trade Instantly', desc: 'Execute trades with 0.444% fees using our advanced terminal interface', cmd: '$ trade --execute --fee=0.444%' }
+  { step: '01', title: 'Get Started', desc: 'Authenticate via Telegram bot to receive your secure access token', cmd: '$ tg --bot @a_trade_fun_bot' },
+  { step: '02', title: 'Download A-Wallet', desc: 'Download and install A-Wallet, our in-house Solana wallet app (available for Mac and Windows), to securely manage your private keys.', cmd: '$ wallet --non-custodial' },
+  { step: '03', title: 'Connect Your Wallet', desc: 'Connect A-Wallet to the A-Trade platform to start trading seamlessly.', cmd: '$ connect --platform=a-trade' },
+  { step: '04', title: 'Start Trading', desc: 'Trade with peace of mind with as low as 0.222% fees using our advanced terminal interface', cmd: '$ trade --execute' }
 ]
 
 const faqs = [
-  { q: 'What is a-trade.fun?', a: 'a-trade.fun is a professional Solana trading platform with advanced analytics and real-time market data.' },
-  { q: 'How do I get started?', a: 'Authenticate via our Telegram bot (@a_trade_dot_fun_bot) to receive your secure access token. Telegram provides an extra layer of security for authentication.' },
-  { q: 'What are the trading fees?', a: 'Our trading fees are 0.444% on all transactions. This competitive rate applies to all trades executed on the platform.' },
-  { q: 'Is it safe to use?', a: 'Yes, absolutely. Your private keys are encrypted and stored on a separate isolated server. Additionally, we offer a self-hosted private key feature where you can host your own signing server using our open-source SDK/framework. With self-hosting, your private keys are stored entirely on your own server (or even your PC/laptop), and we never have access to them.' },
-  { q: 'How does the self-hosted private key feature work?', a: 'Our open-source SDK/framework allows you to run your own signing server. You can host it on your own server or even on your PC/laptop. Check our documentation for detailed installation and setup instructions. Since it\'s open-source, the code is publicly auditable on our GitHub repository. Your keys never leave your server, giving you complete control and maximum security.' }
+  { q: 'What is a-trade.fun?', a: 'A-Trade is a non-custodial trading terminal. You hold your own private keys through A-Wallet, so you remain in full control while trading seamlessly on our platform.' },
+  { q: 'How do I get started?', a: 'Authenticate via our Telegram bot (@a_trade_fun_bot) to receive your secure access token. Telegram provides an extra layer of security for authentication.' },
+  { q: 'What are the trading fees?', a: 'Pay as little as 0.222% per trade with Pro — half the cost of Basic (0.444%). Upgrade to save more on every transaction.' },
+  { q: 'What is A-Wallet?', a: 'A-Wallet is our in-house Solana wallet that integrates seamlessly with A-Trade. It’s non-custodial, which means you remain in full control of your private keys and assets at all times. Transactions are signed locally within the wallet and sent securely to the network, giving you a safe and smooth trading experience.' },
+  { q: 'How does A-Wallet work?', a: 'A-Wallet signs transactions locally during an active session with our platform. Signed transactions are sent for execution, and you can disconnect the wallet at any time to revoke access.' }
 ]
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [currentSuitIndex, setCurrentSuitIndex] = useState(0)
-  const [telegramUrl, setTelegramUrl] = useState('https://t.me/a_trade_dot_fun_bot')
+  const [telegramUrl, setTelegramUrl] = useState('https://t.me/a_trade_fun_bot')
 
   // Handle referral code from URL and set Telegram URL
   useEffect(() => {
@@ -113,7 +112,7 @@ export default function LandingPage() {
 
     // Set Telegram URL with referral code if available
     const storedRefCode = localStorage.getItem('referralCode');
-    const baseUrl = 'https://t.me/a_trade_dot_fun_bot';
+    const baseUrl = 'https://t.me/a_trade_fun_bot';
     setTelegramUrl(storedRefCode ? `${baseUrl}?start=${storedRefCode}` : baseUrl);
   }, []);
 
@@ -143,14 +142,24 @@ export default function LandingPage() {
         <div className="border-2 border-green-500 bg-black shadow-2xl shadow-green-500/20 relative">
           <div className="bg-green-500 px-2 sm:px-4 py-2 flex items-center gap-1 sm:gap-2 sticky top-0 z-20">
             <div className="flex gap-1 sm:gap-1.5 flex-shrink-0">
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-black"></div>
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-black"></div>
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-black"></div>
+              <div className="relative w-3 h-4 sm:w-4 sm:h-5 animate-card-flip" style={{ transformStyle: 'preserve-3d' }}>
+                <div className="absolute inset-0 bg-black border border-black rounded-sm flex items-center justify-center text-[6px] sm:text-[8px] font-bold text-green-500" style={{ backfaceVisibility: 'hidden' }}>♠</div>
+                <div className="absolute inset-0 bg-green-500 border border-black rounded-sm flex items-center justify-center text-[6px] sm:text-[8px] font-bold text-black" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>♥</div>
+              </div>
+              <div className="relative w-3 h-4 sm:w-4 sm:h-5 animate-card-flip" style={{ transformStyle: 'preserve-3d', animationDelay: '0.7s' }}>
+                <div className="absolute inset-0 bg-black border border-black rounded-sm flex items-center justify-center text-[6px] sm:text-[8px] font-bold text-green-500" style={{ backfaceVisibility: 'hidden' }}>♥</div>
+                <div className="absolute inset-0 bg-green-500 border border-black rounded-sm flex items-center justify-center text-[6px] sm:text-[8px] font-bold text-black" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>♣</div>
+              </div>
+              <div className="relative w-3 h-4 sm:w-4 sm:h-5 animate-card-flip" style={{ transformStyle: 'preserve-3d', animationDelay: '1.4s' }}>
+                <div className="absolute inset-0 bg-black border border-black rounded-sm flex items-center justify-center text-[6px] sm:text-[8px] font-bold text-green-500" style={{ backfaceVisibility: 'hidden' }}>♣</div>
+                <div className="absolute inset-0 bg-green-500 border border-black rounded-sm flex items-center justify-center text-[6px] sm:text-[8px] font-bold text-black" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>♦</div>
+              </div>
             </div>
             <span className="text-black font-bold text-xs sm:text-sm truncate">A-TRADE://a-trade.fun</span>
             <div className="hidden md:flex ml-auto gap-2 text-xs text-black items-center">
               <a href="#features" className="hover:underline px-1">FEATURES</a>
               <a href="#how-it-works" className="hover:underline px-1">HOW TO START</a>
+              <a href="#a-wallet" className="hover:underline px-1">A-WALLET</a>
               <a href="#faq" className="hover:underline px-1">FAQ</a>
               <a href="/screener" target="_blank" rel="noopener noreferrer" className="hover:underline px-1">LAUNCH APP</a>
               <a
@@ -203,6 +212,13 @@ export default function LandingPage() {
                   HOW TO START
                 </a>
                 <a
+                  href="#a-wallet"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded"
+                >
+                  A-WALLET
+                </a>
+                <a
                   href="#faq"
                   onClick={() => setMobileMenuOpen(false)}
                   className="text-black font-bold text-sm py-2 px-4 hover:bg-green-400 rounded"
@@ -219,7 +235,7 @@ export default function LandingPage() {
                   LAUNCH APP
                 </a>
                 <a
-                  href="https://t.me/a_trade_dot_fun_bot"
+                  href="https://t.me/a_trade_fun_bot"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMobileMenuOpen(false)}
@@ -351,11 +367,6 @@ export default function LandingPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="text-green-500 font-bold text-sm sm:text-base">{feature.title}</h3>
-                          {feature.badge && (
-                            <span className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded font-mono">
-                              {feature.badge}
-                            </span>
-                          )}
                         </div>
                         <p className="text-green-400/70 text-xs sm:text-sm mb-2">{feature.desc}</p>
                         <div className="text-xs text-green-500/60 font-mono bg-black p-1.5 sm:p-2 border border-green-500/20 overflow-x-auto">
@@ -389,6 +400,70 @@ export default function LandingPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </section>
+
+            <section id="a-wallet" className="mb-8 sm:mb-12">
+              <div className="border-t border-green-500/30 pt-6 sm:pt-8 mb-4 sm:mb-6">
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-green-500 mb-2">[DOWNLOAD A-WALLET]</h2>
+                <p className="text-green-400/70 text-xs sm:text-sm mt-2">
+                  Download our native non-custodial wallet for seamless trading on A-Trade
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+                {/* macOS Apple Silicon */}
+                <div className="border border-green-500/30 bg-gray-900/50 p-4 sm:p-6 hover:border-green-500/50 transition-colors flex flex-col items-center">
+                  <a
+                    href="#"
+                    className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-green-500 text-black font-bold text-sm hover:bg-green-400 border-2 border-green-500 text-center transition-colors group"
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
+                      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+                    </svg>
+                    <div className="text-left leading-tight">
+                      <div className="text-[10px] uppercase font-mono opacity-80">macOS</div>
+                      <div>Apple Silicon</div>
+                    </div>
+                  </a>
+                </div>
+
+                {/* macOS Intel */}
+                <div className="border border-green-500/30 bg-gray-900/50 p-4 sm:p-6 hover:border-green-500/50 transition-colors flex flex-col items-center">
+                  <a
+                    href="#"
+                    className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-green-500 text-black font-bold text-sm hover:bg-green-400 border-2 border-green-500 text-center transition-colors group"
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
+                      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+                    </svg>
+                    <div className="text-left leading-tight">
+                      <div className="text-[10px] uppercase font-mono opacity-80">macOS</div>
+                      <div>Intel x64</div>
+                    </div>
+                  </a>
+                </div>
+
+                {/* Windows x64 */}
+                <div className="border border-green-500/30 bg-gray-900/50 p-4 sm:p-6 hover:border-green-500/50 transition-colors flex flex-col items-center">
+                  <a
+                    href="#"
+                    className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-green-500 text-black font-bold text-sm hover:bg-green-400 border-2 border-green-500 text-center transition-colors group"
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
+                      <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+                    </svg>
+                    <div className="text-left leading-tight">
+                      <div className="text-[10px] uppercase font-mono opacity-80">Windows</div>
+                      <div>x64 Desktop</div>
+                    </div>
+                  </a>
+                </div>
+              </div>
+
+              <div className="mt-4 border border-green-500/20 bg-black p-3 sm:p-4">
+                <div className="text-green-500/70 text-xs sm:text-sm">
+                  <span className="text-green-500 font-bold">Note:</span> A-Wallet is fully non-custodial, keeping your private keys encrypted and accessible only on your device. Your keys never leave your control.
+                </div>
               </div>
             </section>
 
