@@ -13,7 +13,7 @@ const ProBenefits = () => {
     {
       icon: "▊",
       title: "More Active Wallets",
-      description: "Up to 50 wallets simultaneously (vs 9 for Basic user)",
+      description: "Up to 100 wallets simultaneously",
       color: "text-green-500"
     },
     {
