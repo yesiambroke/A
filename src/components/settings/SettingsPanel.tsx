@@ -481,9 +481,8 @@ const SettingsPanel = ({ user }: { user: UserInfo }) => {
                 <p>Ready to unlock advanced trading features?</p>
                 <ul className="list-disc list-inside space-y-1 text-green-200/80">
                   <li>Lower trading fees (0.222% vs 0.444%)</li>
-                  <li>Up to 50 active wallets simultaneously (vs 9)</li>
+                  <li>Up to 100 active wallets simultaneously</li>
                   <li>Early access to future products and exclusive features</li>
-                  <li>Support a solo developer building innovative trading tools</li>
                 </ul>
               </div>
 
