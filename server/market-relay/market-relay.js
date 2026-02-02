@@ -431,9 +431,9 @@ class MarketRelayServer {
     let serverForWs = null;
 
     if (useSSL) {
-      const sslDir = process.env.MARKET_RELAY_SSL_DIR || '/root/ssl';
-      const keyPath = process.env.MARKET_RELAY_SSL_KEY || `${sslDir}/a-trade-key.pem`;
-      const certPath = process.env.MARKET_RELAY_SSL_CERT || `${sslDir}/a-trade.pem`;
+      const sslDir = process.env.MARKET_RELAY_SSL_DIR || '/etc/ssl';
+      const keyPath = process.env.MARKET_RELAY_SSL_KEY || `${sslDir}/private/a-trade-key.pem`;
+      const certPath = process.env.MARKET_RELAY_SSL_CERT || `${sslDir}/certs/a-trade.pem`;
 
       try {
         const key = fs.readFileSync(keyPath);
