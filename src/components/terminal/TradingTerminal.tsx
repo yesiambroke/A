@@ -303,6 +303,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                 console.log('🔄 Terminal authenticated, requesting wallet data to check wallet client status');
                 // Request wallet data immediately to check if wallet client is connected
                 const request = {
+                  type: 'wallet_data_request',
                   requestId: `auth_${Date.now()}`,
                   currentCoin: currentCoin
                 };

@@ -4,7 +4,7 @@ const https = require('https');
 const fs = require('fs');
 const { Pool } = require('pg');
 const { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, Transaction, SystemProgram, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, createTransferInstruction, AccountLayout, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction, NATIVE_MINT } = require('@solana/spl-token');
+const { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, createTransferInstruction, AccountLayout, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction, NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction } = require('@solana/spl-token');
 const { OnlinePumpSdk, PumpSdk, getBuyTokenAmountFromSolAmount } = require('./PumpSDK/index.js');
 const { OnlinePumpAmmSdk, PumpAmmSdk } = require('./PumpSDK/PumpSwap/index.js');
 const BN = require('bn.js');
@@ -33,6 +33,9 @@ const TRADING_FEES = {
 
 const FEE_RECIPIENT = process.env.FEE_RECIPIENT || 'A1zZVRgsJxopzezzsfrB45QQzMW4Tf9HiYWUbx6qzZ3W';
 const JITO_TIP_ADDRESS = process.env.JITO_TIP_ADDRESS || '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5';
+const PUMP_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+const PUMP_FEE_PROGRAM_ID = 'pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ';
+const BONDING_CURVE_DISCRIMINANT = Buffer.from([23, 183, 248, 55, 96, 216, 172, 96]); // 17 b7 f8 37 60 d8 ac 60
 
 class WalletWSSServer {
   constructor(port = 4128) {
@@ -56,7 +59,7 @@ class WalletWSSServer {
     // Initialize Solana connection
     this.solanaConnection = new Connection(
       process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=0a9623d2-dc37-4918-ac67-534e81ba893a',
-      'confirmed'
+      'processed'
     );
 
     // Initialize balance poller
@@ -521,6 +524,10 @@ class WalletWSSServer {
           this.handleDistributeSolRequest(client, message);
           break;
 
+        case 'bundle_launch_request':
+          this.handleBundleLaunchRequest(client, message);
+          break;
+
         default:
           console.warn(`Unknown message type from ${client.id}: "${message.type}"`);
           console.log(`📄 Raw message data from ${client.id}:`, data.toString());
@@ -655,6 +662,11 @@ class WalletWSSServer {
 
       if (protocol === 'v1') {
         const { bondingCurveAccountInfo, bondingCurve, associatedUserAccountInfo } = buyState;
+        console.log("bondingCurveAccountInfo: ", bondingCurveAccountInfo)
+        console.log("associatedUserAccountInfo: ", associatedUserAccountInfo)
+        console.log("bondingCurve: ", bondingCurve)
+        console.log("associatedUserAccountInfo: ", associatedUserAccountInfo)
+
         // Step 2: Calculate token amount from SOL amount
         console.log('🔄 Step 2: Calculating token amount...');
         tokenAmount = getBuyTokenAmountFromSolAmount({
@@ -1222,10 +1234,13 @@ class WalletWSSServer {
           programType: 'TOKEN_PROGRAM'
         });
       }
-    } else {
-      // Clear token info for SOL
+    } else if (request.currentCoin === 'So11111111111111111111111111111112') {
+      // Clear token info ONLY if SOL is explicitly selected
       console.log(`🧹 Clearing token info for user ${client.userId} (SOL selected)`);
       this.userTokens.delete(client.userId);
+    } else {
+      // request.currentCoin might be missing/undefined during some syncs, preserve existing token info
+      // console.log(`ℹ️ Preserving existing token info for user ${client.userId} (currentCoin: ${request.currentCoin})`);
     }
 
     // Get wallets from stored user wallet data
@@ -1235,8 +1250,19 @@ class WalletWSSServer {
 
     const userWallets = isWalletConnected ? (this.userWallets.get(client.userId) || []) : [];
 
+    // DEBUG LOGS
+    console.log(`DEBUG: userId=${client.userId}, isWalletConnected=${isWalletConnected}, userWallets=${userWallets.length}`);
+
     if (!isWalletConnected) {
       console.log(`⚠️ Returning empty wallet list for user ${client.userId} (wallet client disconnected)`);
+    } else if (userWallets.length > 0) {
+      // Trigger immediate poll update for the new token context
+      const walletPubKeys = userWallets.map(wallet => wallet.publicKey);
+      const userToken = this.userTokens.get(client.userId);
+      console.log(`🚀 Triggering immediate poll update for user ${client.userId} with token: ${userToken ? userToken.mintAddress : 'SOL'}`);
+      this.balancePoller.startPollingForUser(client.userId, walletPubKeys, userToken);
+    } else {
+      console.log(`ℹ️ Wallet client is connected but user has no wallets registered for user ${client.userId}`);
     }
 
     if (userWallets.length === 0) {
@@ -1314,6 +1340,7 @@ class WalletWSSServer {
         const walletPubKeys = enrichedWallets.map(wallet => wallet.publicKey);
         if (walletPubKeys.length > 0) {
           const userToken = this.userTokens.get(client.userId);
+          console.log(`🚀 Starting initial poll for user ${client.userId} with token: ${userToken ? userToken.mintAddress : 'SOL'}`);
           this.balancePoller.startPollingForUser(client.userId, walletPubKeys, userToken);
         }
       }
@@ -1640,7 +1667,7 @@ class WalletWSSServer {
     console.log('📦 Processing Bundle Buy Request...');
 
     try {
-      const { mintAddress, wallets, slippage = 5, useJito, protocol = 'v1', pairAddress } = message;
+      const { mintAddress, wallets, slippage = 5, useJito, protocol = 'v1', pairAddress, processMode = 'normal' } = message;
       const userId = client.userId;
 
       if (!wallets || wallets.length === 0) {
@@ -1686,6 +1713,7 @@ class WalletWSSServer {
           virtualTokenReserves: buyState.bondingCurve.virtualTokenReserves.clone(),
           realSolReserves: buyState.bondingCurve.realSolReserves.clone(),
           realTokenReserves: buyState.bondingCurve.realTokenReserves.clone(),
+          isMayhemMode: processMode === 'mayhem'
         };
       } else if (protocol === 'amm' && pairAddress) {
         const poolKey = new PublicKey(pairAddress);
@@ -1700,7 +1728,7 @@ class WalletWSSServer {
       }
 
       const bundleTransactions = [];
-      const { blockhash } = await this.solanaConnection.getLatestBlockhash('confirmed');
+      const { blockhash } = await this.solanaConnection.getLatestBlockhash('processed');
 
       // Iterate through wallets securely
       for (let i = 0; i < wallets.length; i++) {
@@ -1879,6 +1907,312 @@ class WalletWSSServer {
     }
   }
 
+  async handleBundleLaunchRequest(client, message) {
+    console.log('🚀 Processing Bundle Launch Request...');
+
+    try {
+      const {
+        wallets, // Array of { walletId, amount }
+        tokenInfo, // { name, symbol, uri }
+        strategy = 'PENTAD', // PENTAD, IGNIS, FLASH
+        launchType = 'bundle', // single, bundle
+        slippage = 1,
+        requestId,
+        executionMode = 'turbo', // turbo, safe
+        processMode = 'normal' // normal, mayhem
+      } = message;
+
+      const userId = client.userId;
+      if (!wallets || wallets.length === 0) throw new Error('No wallets specified');
+
+      const mayhemMode = processMode === 'mayhem';
+
+      // Handle SINGLE Mode
+      let finalWallets = wallets;
+      let finalStrategy = strategy;
+      if (launchType === 'single') {
+        console.log('☝️  Single Launch Mode Detected - Using only the first wallet');
+        finalWallets = [wallets[0]];
+        finalStrategy = 'PENTAD';
+      }
+
+      console.log(`   - Strategy: ${finalStrategy}`);
+      console.log(`   - Wallets: ${finalWallets.length}`);
+      console.log(`   - Mode: ${processMode}`);
+      console.log(`   - Token: ${tokenInfo.name} (${tokenInfo.symbol})`);
+
+      const userWallets = this.userWallets.get(userId) || [];
+      const mintKeypair = Keypair.generate();
+
+      // Derive PDAs for mocks
+      const [bondingCurve] = PublicKey.findProgramAddressSync(
+        [Buffer.from("bonding-curve"), mintKeypair.publicKey.toBuffer()],
+        new PublicKey(PUMP_PROGRAM_ID)
+      );
+      const associatedBondingCurve = getAssociatedTokenAddressSync(
+        mintKeypair.publicKey,
+        bondingCurve,
+        true
+      );
+
+      // 1. Fetch Global State
+      const global = await this.onlinePumpSdk.fetchGlobal();
+      if (!global) throw new Error('Failed to fetch global state');
+
+      // 2. Partition Wallets into Bundles
+      const partitionWallets = (list, strategy) => {
+        const groups = [];
+        let remaining = [...list];
+
+        // Handle First Bundle (Always includes Dev Launch)
+        let firstBatchSize;
+        if (strategy === 'FLASH') {
+          // Flash: 1 Launch Tx + 4 Stitched Txs (16 wallets) = 17 wallets max for first bundle
+          firstBatchSize = Math.min(17, remaining.length);
+        } else if (strategy === 'IGNIS') {
+          firstBatchSize = Math.min(Math.floor(Math.random() * 4) + 2, remaining.length);
+        } else {
+          firstBatchSize = Math.min(5, remaining.length);
+        }
+        groups.push(remaining.splice(0, firstBatchSize));
+
+        // Handle Remaining Bundles
+        while (remaining.length > 0) {
+          let size;
+          if (strategy === 'FLASH') {
+            size = Math.min(20, remaining.length); // 5 txs * 4 stitched buys = 20 wallets
+          } else if (strategy === 'IGNIS') {
+            size = Math.min(Math.floor(Math.random() * 4) + 2, remaining.length);
+            if (remaining.length - size === 1) size++; // Prevent loner 1-wallet bundle
+          } else {
+            size = Math.min(5, remaining.length);
+          }
+          groups.push(remaining.splice(0, size));
+        }
+        return groups;
+      };
+
+      const walletGroups = partitionWallets(finalWallets, finalStrategy);
+
+      // 3. Simulation State
+      const TOTAL_FEE_BPS = new BN(125); // Surgical precision
+      let simulatedCurve = {
+        virtualTokenReserves: global.initialVirtualTokenReserves.clone(),
+        virtualSolReserves: global.initialVirtualSolReserves.clone(),
+        realTokenReserves: global.initialRealTokenReserves.clone(),
+        realSolReserves: new BN(0),
+        tokenTotalSupply: global.tokenTotalSupply.clone(),
+        complete: false,
+        creator: PublicKey.default,
+        isMayhemMode: mayhemMode // Wire user's choice into simulation
+      };
+
+      const finalBundles = []; // Array of bundleTransactions arrays
+
+      // 4. Build Strategy Plan
+      for (let bIndex = 0; bIndex < walletGroups.length; bIndex++) {
+        const group = walletGroups[bIndex];
+        const bundleTransactions = [];
+
+        console.log(`   📦 Simulating Bundle ${bIndex + 1}/${walletGroups.length} (${group.length} wallets)`);
+
+        if (finalStrategy === 'FLASH') {
+          // --- FLASH MODE STITCHING ---
+          let walletPtr = 0;
+
+          // Tx 1: Launch (if first bundle) or first batch of buys
+          if (bIndex === 0) {
+            const devEntry = group[walletPtr++];
+            const walletData = userWallets.find(w => w.id === devEntry.walletId);
+            const solAmountBN = new BN(Math.floor(devEntry.amount * LAMPORTS_PER_SOL).toString());
+            const netSolBN = solAmountBN.muln(10000).div(TOTAL_FEE_BPS.addn(10000));
+            const tokenAmount = netSolBN.mul(global.initialVirtualTokenReserves).div(global.initialVirtualSolReserves.add(netSolBN));
+
+            const ixs = await this.offlinePumpSdk.createV2AndBuyInstructions({
+              global,
+              mint: mintKeypair.publicKey,
+              name: tokenInfo.name,
+              symbol: tokenInfo.symbol,
+              uri: tokenInfo.uri,
+              creator: new PublicKey(walletData.publicKey),
+              user: new PublicKey(walletData.publicKey),
+              amount: tokenAmount,
+              solAmount: solAmountBN,
+              mayhemMode // Pass mayhem flag to SDK
+            });
+
+            simulatedCurve.virtualSolReserves = simulatedCurve.virtualSolReserves.add(netSolBN);
+            simulatedCurve.virtualTokenReserves = simulatedCurve.virtualTokenReserves.sub(tokenAmount);
+            simulatedCurve.realSolReserves = simulatedCurve.realSolReserves.add(netSolBN);
+            simulatedCurve.realTokenReserves = simulatedCurve.realTokenReserves.sub(tokenAmount);
+            simulatedCurve.creator = new PublicKey(walletData.publicKey);
+
+            bundleTransactions.push({ instructions: ixs, signers: [walletData.id, 'mint'] });
+          }
+
+          // Remaining Transactions in the bundle (Stitched)
+          while (walletPtr < group.length) {
+            const stitchedIxs = [];
+            const txSigners = [];
+            const batchSize = Math.min(4, group.length - walletPtr);
+
+            for (let i = 0; i < batchSize; i++) {
+              const entry = group[walletPtr++];
+              const walletData = userWallets.find(w => w.id === entry.walletId);
+              const solAmountBN = new BN(Math.floor(entry.amount * LAMPORTS_PER_SOL).toString());
+              const netSolBN = solAmountBN.muln(10000).div(TOTAL_FEE_BPS.addn(10000));
+              const tokenAmount = netSolBN.mul(simulatedCurve.virtualTokenReserves).div(simulatedCurve.virtualSolReserves.add(netSolBN));
+
+              // Use manual builder helper
+              const buyIxs = await this.buildManualBuyInstructions({
+                walletData,
+                mintKeypair,
+                simulatedCurve,
+                global,
+                tokenAmount,
+                solAmountBN,
+                slippage
+              });
+
+              console.log("   ✅ [FLASH] Built manual buy instruction (bypassing RPC)");
+              stitchedIxs.push(...buyIxs);
+              txSigners.push(walletData.id);
+              simulatedCurve.virtualSolReserves = simulatedCurve.virtualSolReserves.add(netSolBN);
+              simulatedCurve.virtualTokenReserves = simulatedCurve.virtualTokenReserves.sub(tokenAmount);
+              simulatedCurve.realSolReserves = simulatedCurve.realSolReserves.add(netSolBN);
+              simulatedCurve.realTokenReserves = simulatedCurve.realTokenReserves.sub(tokenAmount);
+            }
+            bundleTransactions.push({ instructions: stitchedIxs, signers: txSigners });
+          }
+        } else {
+          // --- PENTAD / IGNIS (One wallet per transaction) ---
+          for (let wIndex = 0; wIndex < group.length; wIndex++) {
+            const entry = group[wIndex];
+            const walletData = userWallets.find(w => w.id === entry.walletId);
+            const solAmountBN = new BN(Math.floor(entry.amount * LAMPORTS_PER_SOL).toString());
+            const netSolBN = solAmountBN.muln(10000).div(TOTAL_FEE_BPS.addn(10000));
+
+            let ixs;
+            let tokenAmount;
+
+            if (bIndex === 0 && wIndex === 0) {
+              tokenAmount = netSolBN.mul(global.initialVirtualTokenReserves).div(global.initialVirtualSolReserves.add(netSolBN));
+              ixs = await this.offlinePumpSdk.createV2AndBuyInstructions({
+                global,
+                mint: mintKeypair.publicKey,
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                uri: tokenInfo.uri,
+                creator: new PublicKey(walletData.publicKey),
+                user: new PublicKey(walletData.publicKey),
+                amount: tokenAmount,
+                solAmount: solAmountBN,
+                mayhemMode // Pass mayhem flag to SDK
+              });
+              simulatedCurve.creator = new PublicKey(walletData.publicKey);
+              bundleTransactions.push({ instructions: ixs, signers: [walletData.id, 'mint'] });
+            } else {
+              tokenAmount = netSolBN.mul(simulatedCurve.virtualTokenReserves).div(simulatedCurve.virtualSolReserves.add(netSolBN));
+
+
+              // Use manual builder helper
+              ixs = await this.buildManualBuyInstructions({
+                walletData,
+                mintKeypair,
+                simulatedCurve,
+                global,
+                tokenAmount,
+                solAmountBN,
+                slippage
+              });
+
+              console.log("   ✅ [PENTAD/IGNIS] Built manual buy instruction (bypassing RPC)");
+
+              bundleTransactions.push({ instructions: ixs, signers: [walletData.id] });
+            }
+
+            simulatedCurve.virtualSolReserves = simulatedCurve.virtualSolReserves.add(netSolBN);
+            simulatedCurve.virtualTokenReserves = simulatedCurve.virtualTokenReserves.sub(tokenAmount);
+            simulatedCurve.realSolReserves = simulatedCurve.realSolReserves.add(netSolBN);
+            simulatedCurve.realTokenReserves = simulatedCurve.realTokenReserves.sub(tokenAmount);
+          }
+        }
+
+        // 4.5 Add Jito Tip to the final transaction of this bundle (Mandatory for Launchpad)
+        if (bundleTransactions.length > 0) {
+          const lastBt = bundleTransactions[bundleTransactions.length - 1];
+          const currentTip = this.jitoTipPoller ? this.jitoTipPoller.tipFloor : 0;
+          const tipStart = currentTip > 0 ? currentTip : 0.001;
+          const tipLamports = Math.floor(tipStart * LAMPORTS_PER_SOL);
+          console.log('currentTip: ', currentTip);
+          const jitoTipAccount = new PublicKey(JITO_TIP_ADDRESS);
+          const tipPayerId = lastBt.signers[0]; // Use the fee payer (first signer)
+          const tipPayerWallet = userWallets.find(w => w.id === tipPayerId);
+
+          if (tipPayerWallet) {
+            const tipIx = SystemProgram.transfer({
+              fromPubkey: new PublicKey(tipPayerWallet.publicKey),
+              toPubkey: jitoTipAccount,
+              lamports: tipLamports
+            });
+            lastBt.instructions.push(tipIx);
+            console.log(`      💡 Added Jito tip (${tipStart} SOL) to last tx of bundle paid by ${tipPayerWallet.publicKey}`);
+          }
+        }
+
+        // Convert instructions to serialized transactions
+        const { blockhash } = await this.solanaConnection.getLatestBlockhash('processed');
+        const serializedBundle = bundleTransactions.map(bt => {
+          const tx = new Transaction();
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = new PublicKey(userWallets.find(w => w.id === bt.signers[0]).publicKey);
+          tx.add(...bt.instructions);
+
+          // Partial sign with mint keypair if needed
+          if (bt.signers.includes('mint')) {
+            tx.partialSign(mintKeypair);
+            console.log(`      ✍️  Partially signed launch for mint: ${mintKeypair.publicKey.toBase58()}`);
+          }
+
+          return {
+            serialized: tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'),
+            signers: bt.signers.filter(s => s !== 'mint') // Only send wallet IDs to client
+          };
+        });
+
+        finalBundles.push(serializedBundle);
+      }
+
+      // 5. Send to Wallet Client for Signing
+      const bundleData = {
+        bundles: finalBundles,
+        totalWallets: finalWallets.length,
+        mintAddress: mintKeypair.publicKey.toBase58(),
+        tokenInfo,
+        executionMode
+      };
+
+      console.log(`   📤 Forwarding ${finalBundles.length} bundles to wallet client for signing (Bundle Launch)...`);
+
+      await this.sendBundleSignRequest(
+        userId,
+        bundleData,
+        requestId,
+        0, // bundleIndex
+        [], // accumulatedSignedTxs
+        'bundle_launch'
+      );
+
+    } catch (error) {
+      console.error('❌ Bundle Launch Failed:', error);
+      client.ws.send(JSON.stringify({
+        type: 'error',
+        message: `Bundle launch failed: ${error.message}`
+      }));
+    }
+  }
+
+
   /**
    * Helper to send a sign request and WAIT for the signed transactions
    */
@@ -1968,7 +2302,7 @@ class WalletWSSServer {
       if (!receiverWallet) throw new Error('Receiver wallet not found');
 
       const receiverPubKey = new PublicKey(receiverWallet.publicKey);
-      const { blockhash } = await this.solanaConnection.getLatestBlockhash('confirmed');
+      const { blockhash } = await this.solanaConnection.getLatestBlockhash('processed');
       const { Transaction, SystemProgram } = require('@solana/web3.js');
 
       // 1. Fetch real-time balances for ALL source wallets
@@ -2513,8 +2847,9 @@ class WalletWSSServer {
         // Notify terminal of timeout
         const userConnections = this.userConnections.get(userId);
         if (userConnections?.terminal) {
+          const respType = `${requestType}_response`;
           userConnections.terminal.ws.send(JSON.stringify({
-            type: 'nuke_response',
+            type: respType,
             requestId: originalRequestId,
             success: false,
             error: 'Bundle signing timed out'
@@ -2544,8 +2879,9 @@ class WalletWSSServer {
       // Notify terminal client
       const userConnections = this.userConnections.get(pendingRequest.userId);
       if (userConnections?.terminal) {
+        const respType = `${pendingRequest.requestType}_response`;
         userConnections.terminal.ws.send(JSON.stringify({
-          type: 'nuke_response',
+          type: respType,
           requestId: pendingRequest.originalRequestId,
           success: false,
           error: reason || 'Bundle signing failed'
@@ -2586,7 +2922,8 @@ class WalletWSSServer {
           pendingRequest.bundleData,
           pendingRequest.originalRequestId,
           nextBundleIndex,
-          allSignedTransactions
+          allSignedTransactions,
+          pendingRequest.requestType
         );
         return;
       }
@@ -2634,88 +2971,156 @@ class WalletWSSServer {
       const allBundleIds = [];
       const successfulBundles = [];
 
-      for (const [idx, jitoPayload] of jitoBundles.entries()) {
-        console.log(`🚀 Spamming Jito Bundle ${idx + 1}/${jitoBundles.length}...`);
+      // Check execution mode and choose strategy
+      const isTurboMode = pendingRequest.bundleData?.executionMode === 'turbo';
 
-        // Create 10 parallel requests distributed across endpoints
-        // OPTIMIZATION: Stop spamming if one succeeds (Race Logic or simple check)
-        const sendPromises = [];
-        let bundleSuccess = false;
-        let successResult = null;
+      if (isTurboMode) {
+        // TURBO MODE: Parallel with staggered delays
+        console.log('⚡ TURBO MODE: Launching all bundles in parallel with staggered delays (10x spam)...');
 
-        // We run promises but we want to know ASAP if one worked.
-        // Simple Promise.any logic? Node environment might not support.
-        // We will just process all but track success.
+        const bundlePromises = jitoBundles.map(async (jitoPayload, idx) => {
+          const delayMs = idx * 400;
+          if (delayMs > 0) {
+            await new Promise(r => setTimeout(r, delayMs));
+          }
 
-        for (let i = 0; i < 10; i++) {
-          const endpoint = JITO_ENDPOINTS[i % JITO_ENDPOINTS.length];
-          sendPromises.push(
-            this.sendJitoBundle(jitoPayload, endpoint)
-              .then(bundleId => ({ success: true, bundleId, endpoint }))
-              .catch(err => ({ success: false, error: err.message, endpoint }))
-          );
+          console.log(`🚀 Spamming Jito Bundle ${idx + 1}/${jitoBundles.length}... (Delayed ${delayMs}ms, 10x heavy spam)`);
+
+          // 10x Heavy Spam Loop (leveraging user's proxy load balancer)
+          const sendPromises = [];
+          for (let i = 0; i < 10; i++) {
+            const endpoint = JITO_ENDPOINTS[i % JITO_ENDPOINTS.length];
+            sendPromises.push(this.sendJitoBundle(jitoPayload, endpoint));
+          }
+
+          // Wait for all spam endpoints to respond
+          const results = await Promise.all(sendPromises);
+
+          // Find the best success result
+          // Priority 1: Actual Bundle ID (Accepted)
+          // Priority 2: Already Processed (Landed)
+          const cleanSuccess = results.find(r => r.success && r.bundleId);
+          const alreadyProcessed = results.find(r => r.success && r.isAlreadyProcessed);
+
+          const successResult = cleanSuccess || alreadyProcessed;
+
+          if (successResult) {
+            const bundleId = successResult.bundleId || "Already Landed";
+            const status = successResult.isAlreadyProcessed ? "ALREADY ON-CHAIN" : "ACCEPTED";
+
+            console.log(`✅ Bundle ${idx + 1} ${status}! ID: ${bundleId}`);
+            console.log(`   - Verified by endpoint: ${successResult.endpoint} (${results.filter(r => r.success).length}/${results.length} success)`);
+
+            return {
+              success: true,
+              bundleIndex: idx,
+              bundleId: successResult.bundleId // Can be null if already processed
+            };
+          } else {
+            console.error(`❌ Bundle ${idx + 1} FAILED to submit (0/${results.length} success)`);
+
+            const errorCounts = {};
+            results.forEach(r => {
+              if (!r.success) {
+                const msg = r.isRateLimited ? "Rate Limited / Congested" : (r.error || "Unknown Error");
+                errorCounts[msg] = (errorCounts[msg] || 0) + 1;
+              }
+            });
+            Object.entries(errorCounts).forEach(([err, count]) => {
+              console.error(`   - Error: ${err} (${count}/${results.length} endpoints)`);
+            });
+
+            return { success: false, bundleIndex: idx };
+          }
+        });
+
+        const bundleResults = await Promise.all(bundlePromises);
+
+        bundleResults.forEach(result => {
+          if (result.success) {
+            if (result.bundleId) allBundleIds.push(result.bundleId);
+            successfulBundles.push({
+              bundleIndex: result.bundleIndex,
+              bundleId: result.bundleId
+            });
+          }
+        });
+
+      } else {
+        // NORMAL MODE: Sequential submission
+        console.log('🐢 NORMAL MODE: Sequential bundle submission (10x spam)...');
+
+        for (const [idx, jitoPayload] of jitoBundles.entries()) {
+          console.log(`🚀 Spamming Jito Bundle ${idx + 1}/${jitoBundles.length}... (10x heavy spam)`);
+
+          const sendPromises = [];
+          for (let i = 0; i < 10; i++) {
+            const endpoint = JITO_ENDPOINTS[i % JITO_ENDPOINTS.length];
+            sendPromises.push(this.sendJitoBundle(jitoPayload, endpoint));
+          }
+
+          // Wait for all spam endpoints to respond
+          const results = await Promise.all(sendPromises);
+
+          // Find the best success result
+          const cleanSuccess = results.find(r => r.success && r.bundleId);
+          const alreadyProcessed = results.find(r => r.success && r.isAlreadyProcessed);
+
+          const successResult = cleanSuccess || alreadyProcessed;
+
+          if (successResult) {
+            const bundleId = successResult.bundleId || "Already Landed";
+            const status = successResult.isAlreadyProcessed ? "ALREADY ON-CHAIN" : "ACCEPTED";
+
+            if (successResult.bundleId) allBundleIds.push(successResult.bundleId);
+            console.log(`✅ Bundle ${idx + 1} ${status}! ID: ${bundleId}`);
+            console.log(`   - Verified by endpoint: ${successResult.endpoint} (${results.filter(r => r.success).length}/${results.length} success)`);
+
+            successfulBundles.push({
+              bundleIndex: idx,
+              bundleId: successResult.bundleId
+            });
+          } else {
+            console.error(`❌ Bundle ${idx + 1} FAILED to submit (0/${results.length} success)`);
+
+            const errorCounts = {};
+            results.forEach(r => {
+              if (!r.success) {
+                const msg = r.isRateLimited ? "Rate Limited / Congested" : (r.error || "Unknown Error");
+                errorCounts[msg] = (errorCounts[msg] || 0) + 1;
+              }
+            });
+            Object.entries(errorCounts).forEach(([err, count]) => {
+              console.error(`   - Error: ${err} (${count}/${results.length} endpoints)`);
+            });
+          }
         }
-
-        // Wait for all spam attempts (improving this to Promise.any would be faster but this is robust)
-        const results = await Promise.all(sendPromises);
-
-        // Check for successes
-        const successes = results.filter(r => r.success);
-        if (successes.length > 0) {
-          const bundleId = successes[0].bundleId; // All successful ones should have same ID
-          allBundleIds.push(bundleId);
-          console.log(`✅ Bundle ${idx + 1} Submitted! ID: ${bundleId}`);
-          console.log(`   - Success Rate: ${successes.length}/10`);
-
-          successfulBundles.push({
-            bundleIndex: idx,
-            bundleId: bundleId
-          });
-
-          bundleSuccess = true;
-        } else {
-          console.error(`❌ Bundle ${idx + 1} FAILED to submit (0/10 success)`);
-          // Group errors by message to avoid log spam if many are the same
-          const errorCounts = {};
-          results.forEach(r => {
-            if (!r.success) {
-              errorCounts[r.error] = (errorCounts[r.error] || 0) + 1;
-            }
-          });
-          Object.entries(errorCounts).forEach(([err, count]) => {
-            console.error(`   - Error: ${err} (${count}/10 endpoints)`);
-          });
-        }
-
-        // SEQUENTIAL DELAY: REMOVED for Speed.
-        // We fire immediately after success.
-        // if (idx < jitoBundles.length - 1 && bundleSuccess) {
-        //   console.log('⏳ Waiting 1000ms before next bundle to ensure sequential blocks...');
-        //   await new Promise(r => setTimeout(r, 1000));
-        // }
       }
 
       if (successfulBundles.length === 0) {
         throw new Error('All Jito bundle submissions failed');
       }
 
-      // If this was a BUNDLE BUY or GATHER SOL, we stop here (no gather verification needed)
-      if (pendingRequest.requestType === 'bundle_buy' || pendingRequest.requestType === 'gather_sol') {
+      // If this was a BUNDLE BUY or GATHER SOL or BUNDLE LAUNCH, we stop here (no gather verification needed)
+      if (pendingRequest.requestType === 'bundle_buy' || pendingRequest.requestType === 'gather_sol' || pendingRequest.requestType === 'bundle_launch') {
         console.log(`✅ ${pendingRequest.requestType} submission complete. Notifying client.`);
 
         const userConnections = this.userConnections.get(pendingRequest.userId);
         if (userConnections?.terminal) {
           const isGather = pendingRequest.requestType === 'gather_sol';
-          const msg = isGather
-            ? `Gather SOL Submitted! (${successfulBundles.length} bundles sent)`
-            : `Bundle Buy submitted to Jito! (ID: ${successfulBundles[0].bundleId})`;
+          const isLaunch = pendingRequest.requestType === 'bundle_launch';
+
+          let msg = `Bundle Buy submitted to Jito! (ID: ${successfulBundles[0].bundleId})`;
+          if (isGather) msg = `Gather SOL Submitted! (${successfulBundles.length} bundles sent)`;
+          if (isLaunch) msg = `Bundle Launch Submitted! (${successfulBundles.length} bundles sent)`;
 
           userConnections.terminal.ws.send(JSON.stringify({
-            type: isGather ? 'gather_sol_response' : 'bundle_buy_response',
-            requestId: pendingRequest.originalRequestId, // bundle_buy_TIMESTAMP
+            type: `${pendingRequest.requestType}_response`,
+            requestId: pendingRequest.originalRequestId,
             success: true,
             message: msg,
-            bundleIds: allBundleIds
+            bundleIds: allBundleIds,
+            mintAddress: isLaunch ? pendingRequest.bundleData.mintAddress : undefined
           }));
         }
         return;
@@ -2935,8 +3340,6 @@ class WalletWSSServer {
 
   async sendJitoBundle(payload, endpointName) {
     try {
-      //console.log("payload : ", payload);
-      // Ensure no trailing slash in proxy URL
       const proxyBase = JITO_PROXY_URL.endsWith('/') ? JITO_PROXY_URL.slice(0, -1) : JITO_PROXY_URL;
       const url = `${proxyBase}/api/v1/bundles?endpoint=${endpointName}`;
 
@@ -2945,26 +3348,44 @@ class WalletWSSServer {
         timeout: 5000 // 5s timeout
       });
 
+      // Handle Jito API errors inside the 200 response
       if (response.data.error) {
-        throw new Error(response.data.error.message);
+        const error = response.data.error;
+        const code = error.code;
+        const message = error.message || "";
+
+        // Already Processed (-32602)
+        if (code === -32602 || message.toLowerCase().includes("already processed")) {
+          return { success: true, bundleId: null, isAlreadyProcessed: true, endpoint: endpointName };
+        }
+
+        // Rate Limited (-32097)
+        if (code === -32097 || message.toLowerCase().includes("rate limit") || message.toLowerCase().includes("congested")) {
+          return { success: false, error: message, isRateLimited: true, endpoint: endpointName };
+        }
+
+        return { success: false, error: message, endpoint: endpointName };
       }
 
-      return response.data.result; // Returns the Bundle ID
+      return { success: true, bundleId: response.data.result, isAlreadyProcessed: false, endpoint: endpointName };
     } catch (error) {
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        let msg = error.response.data?.error?.message || error.response.data || error.message;
-        if (typeof msg === 'object') {
-          msg = JSON.stringify(msg);
-        }
-        throw new Error(`Jito API Error: ${msg}`);
-      } else if (error.request) {
-        // The request was made but no response was received
-        throw new Error(`Jito Proxy Timeout/Unreachable: ${error.message}`);
-      } else {
-        throw error;
+      const errorData = error.response?.data || error.message || "Unknown Error";
+      let errorMsg = typeof errorData === 'object' ? JSON.stringify(errorData) : errorData;
+
+      // Detect "already processed" even in HTTP error responses
+      if (errorMsg.toLowerCase().includes("already processed") || errorMsg.includes("-32602")) {
+        return { success: true, bundleId: null, isAlreadyProcessed: true, endpoint: endpointName };
       }
+
+      // Detect rate limits in HTTP error responses
+      const isRateLimited = errorMsg.toLowerCase().includes("rate limit") || errorMsg.toLowerCase().includes("congested") || errorMsg.includes("-32097");
+
+      return {
+        success: false,
+        error: errorMsg,
+        isRateLimited,
+        endpoint: endpointName
+      };
     }
   }
 
@@ -3005,6 +3426,59 @@ class WalletWSSServer {
     console.warn(`⚠️ Balance verification timed out`);
     return false;
   }
+
+  // Helper method to build buy instructions manually, bypassing SDK's RPC account fetching
+  async buildManualBuyInstructions({
+    walletData,
+    mintKeypair,
+    simulatedCurve,
+    global,
+    tokenAmount,
+    solAmountBN,
+    slippage,
+    tokenProgram = TOKEN_2022_PROGRAM_ID
+  }) {
+    const associatedUser = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      new PublicKey(walletData.publicKey),
+      true,
+      tokenProgram
+    );
+
+    // Calculate slippage-adjusted SOL amount
+    const slippageAdjustedSolAmount = solAmountBN.add(
+      solAmountBN.mul(new BN(Math.floor(slippage * 10))).div(new BN(1000))
+    );
+
+    const ixs = [];
+
+    // Add create ATA instruction
+    ixs.push(
+      createAssociatedTokenAccountIdempotentInstruction(
+        new PublicKey(walletData.publicKey),
+        associatedUser,
+        new PublicKey(walletData.publicKey),
+        mintKeypair.publicKey,
+        tokenProgram
+      )
+    );
+
+    // Add buy instruction using SDK's internal method (no RPC fetches)
+    const buyIx = await this.offlinePumpSdk.getBuyInstructionInternal({
+      user: new PublicKey(walletData.publicKey),
+      associatedUser,
+      mint: mintKeypair.publicKey,
+      creator: simulatedCurve.creator,
+      feeRecipient: global.feeRecipient,
+      amount: tokenAmount,
+      solAmount: slippageAdjustedSolAmount,
+      tokenProgram
+    });
+
+    ixs.push(buyIx);
+
+    return ixs;
+  }
 }
 
 // SOL Balance Polling Service
@@ -3019,6 +3493,9 @@ class SolBalancePoller {
 
   // Monitor SOL balance changes for a specific user's wallets
   async startPollingForUser(userId, walletPubKeys, tokenInfo = null) {
+    // Ensure we don't have multiple polling intervals for the same user
+    this.stopPollingForUser(userId);
+
     if (!walletPubKeys || walletPubKeys.length === 0) {
       //console.log(`⚠️ No wallets to poll for user ${userId}`);
       return;
