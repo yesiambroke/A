@@ -747,8 +747,6 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       tradeUnsubscribeRef.current = null;
     }
 
-    setRecentTrades([]);
-
     if (currentCoin === 'So11111111111111111111111111111112') {
       console.log(`⏭️ TradingTerminal: Skipping trade subscription for SOL`);
       return;
@@ -776,11 +774,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
     tradeUnsubscribeRef.current = unsubscribe;
     return unsubscribe;
-  }, [currentCoin, subscribeToTrades, wssConnection]);
+  }, [currentCoin, subscribeToTrades]);
 
   // Initial recent trades load
   React.useEffect(() => {
     let cancelled = false;
+    setRecentTrades([]); // Clear only when coin actually changes
     if (currentCoin === 'So11111111111111111111111111111112') return;
 
     (async () => {
