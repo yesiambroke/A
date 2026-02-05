@@ -24,6 +24,11 @@ const LaunchpadPage = ({ operator }: LaunchpadPageProps) => {
     // Wallet State
     const [connectedWallets, setConnectedWallets] = useState<any[]>([]);
     const [walletConnectionStatus, setWalletConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+
+    // Market Relay API URL
+    const MARKET_RELAY_API_URL = process.env.NEXT_PUBLIC_MARKET_RELAY_API_URL ||
+        (process.env.NODE_ENV === 'production' ? 'https://token-api.a-trade.fun' : 'http://localhost:8082');
+
     const [currentCoin] = useState<string>('So11111111111111111111111111111112');
     const [wssConnection, setWssConnection] = useState<WebSocket | null>(null);
 
@@ -376,8 +381,8 @@ const LaunchpadPage = ({ operator }: LaunchpadPageProps) => {
 
             setLaunchProgress({ percentage: 5, currentProcess: "Getting Image Pre-sign URL..." });
 
-            // 1. Get pre-sign URL for image
-            const presignImageRes = await fetch("https://pump.fun/api/ipfs-presign");
+            // 1. Get pre-sign URL for image via our Proxy
+            const presignImageRes = await fetch(`${MARKET_RELAY_API_URL}/api/ipfs-presign`);
             const presignImageData = await presignImageRes.json();
             if (!presignImageData.data) throw new Error("Failed to get image pre-sign URL");
 
@@ -401,8 +406,8 @@ const LaunchpadPage = ({ operator }: LaunchpadPageProps) => {
 
             setLaunchProgress({ percentage: 20, currentProcess: "Getting Metadata Pre-sign URL..." });
 
-            // 3. Get pre-sign URL for metadata JSON
-            const presignJsonRes = await fetch("https://pump.fun/api/ipfs-presign");
+            // 3. Get pre-sign URL for metadata JSON via our Proxy
+            const presignJsonRes = await fetch(`${MARKET_RELAY_API_URL}/api/ipfs-presign`);
             const presignJsonData = await presignJsonRes.json();
             if (!presignJsonData.data) throw new Error("Failed to get metadata pre-sign URL");
 
@@ -1034,7 +1039,7 @@ const LaunchpadPage = ({ operator }: LaunchpadPageProps) => {
                                             </div>
                                             <div className="flex justify-between items-end">
                                                 <span className="text-[10px] text-gray-400">SOL:</span>
-                                                <span className="text-[10px] text-green-300 font-mono">{(wallet.solBalance || 0).toFixed(2)}</span>
+                                                <span className="text-[10px] text-green-300 font-mono">{(wallet.solBalance || 0).toFixed(3)}</span>
                                             </div>
                                             {getWalletAmount(wallet.id) && (
                                                 <div className="mt-1 pt-1 border-t border-gray-600/50 flex justify-between items-center text-[10px]">

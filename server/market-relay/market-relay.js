@@ -118,6 +118,22 @@ class MarketRelayServer {
       }
     });
 
+    // IPFS Pre-sign proxy for metadata/image uploads
+    this.app.get('/api/ipfs-presign', async (req, res) => {
+      try {
+        const upstream = await fetch('https://pump.fun/api/ipfs-presign');
+        if (!upstream.ok) {
+          const body = await upstream.text();
+          return res.status(upstream.status).json({ success: false, error: body.substring(0, 200) });
+        }
+        const data = await upstream.json();
+        return res.json(data);
+      } catch (err) {
+        console.error('❌ IPFS pre-sign proxy error:', err.message);
+        return res.status(500).json({ success: false, error: 'Proxy request failed' });
+      }
+    });
+
     // Health check endpoint
     this.app.get('/health', (req, res) => {
       res.json({
