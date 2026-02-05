@@ -254,19 +254,21 @@ const PageHeader = ({ currentPage, operator }: PageHeaderProps) => {
             <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-0.5 bg-green-400 rounded-full"></div>
           )}
         </Link>
-        <Link
-          href="/launchpad"
-          className={`flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold transition-all duration-200 relative ${currentPage === 'launchpad'
-            ? 'border-green-400 bg-green-500/10 text-black shadow-md shadow-green-500/30'
-            : 'border-black/50 bg-black/20 text-green-400 hover:bg-black/30 hover:border-green-500/50'
-            }`}
-        >
-          <LaunchpadIcon />
-          <span className="hidden sm:inline">Launchpad</span>
-          {currentPage === 'launchpad' && (
-            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-0.5 bg-green-400 rounded-full"></div>
-          )}
-        </Link>
+        {operator && (
+          <Link
+            href="/launchpad"
+            className={`flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold transition-all duration-200 relative ${currentPage === 'launchpad'
+              ? 'border-green-400 bg-green-500/10 text-black shadow-md shadow-green-500/30'
+              : 'border-black/50 bg-black/20 text-green-400 hover:bg-black/30 hover:border-green-500/50'
+              }`}
+          >
+            <LaunchpadIcon />
+            <span className="hidden sm:inline">Launchpad</span>
+            {currentPage === 'launchpad' && (
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-0.5 bg-green-400 rounded-full"></div>
+            )}
+          </Link>
+        )}
         <Link
           href="/referral"
           className={`flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold transition-all duration-200 relative ${currentPage === 'referral'
