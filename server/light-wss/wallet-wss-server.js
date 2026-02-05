@@ -10,6 +10,7 @@ const { OnlinePumpAmmSdk, PumpAmmSdk } = require('./PumpSDK/PumpSwap/index.js');
 const BN = require('bn.js');
 const bs58 = require('bs58');
 const axios = require('axios');
+const pnlManager = require('./PnLHistoryManager.js');
 require('dotenv').config({ path: '../../.env.local' });
 
 // Jito Configuration
@@ -473,6 +474,18 @@ class WalletWSSServer {
       switch (message.type) {
         case 'wallet_data_request':
           this.handleWalletDataRequest(client, message);
+          break;
+
+        case 'record_trade':
+          this.handleRecordTrade(client, message);
+          break;
+
+        case 'recalculate_pnl':
+          this.handleRecalculatePnL(client, message);
+          break;
+
+        case 'reset_pnl':
+          this.handleResetPnL(client, message);
           break;
 
         case 'wallet_list':
@@ -1283,10 +1296,63 @@ class WalletWSSServer {
       requestId: request.requestId,
       success: true,
       wallets: userWallets,
-      userTier: client.userTier
+      userTier: client.userTier,
+      pnl: request.currentCoin ? pnlManager.load(client.userId, request.currentCoin) : null
     }));
 
     console.log(`📤 Sent ${userWallets.length} wallets to authenticated client ${client.id}`);
+  }
+
+  async handleRecordTrade(client, message) {
+    if (!client.authenticated || !client.userId) return;
+    if (!message.mint || !message.trade) return;
+
+    try {
+      console.log(`📈 Recording trade for User ${client.userId}, Token: ${message.mint}`);
+
+      const updatedPnL = pnlManager.addTrade(client.userId, message.mint, message.trade);
+
+      // Broadcast update back to the client
+      client.ws.send(JSON.stringify({
+        type: 'pnl_update',
+        mint: message.mint,
+        pnl: updatedPnL
+      }));
+    } catch (err) {
+      console.error('❌ Error recording trade:', err.message);
+    }
+  }
+
+  async handleRecalculatePnL(client, message) {
+    if (!client.authenticated || !client.userId || !message.mint) return;
+    try {
+      console.log(`🧹 Recalculating PnL for User ${client.userId}, Token: ${message.mint}`);
+      const updatedPnL = pnlManager.recalculate(client.userId, message.mint);
+      if (updatedPnL) {
+        client.ws.send(JSON.stringify({
+          type: 'pnl_update',
+          mint: message.mint,
+          pnl: updatedPnL
+        }));
+      }
+    } catch (err) {
+      console.error('❌ Error recalculating PnL:', err.message);
+    }
+  }
+
+  async handleResetPnL(client, message) {
+    if (!client.authenticated || !client.userId || !message.mint) return;
+    try {
+      console.log(`🗑️ Resetting PnL for User ${client.userId}, Token: ${message.mint}`);
+      const updatedPnL = pnlManager.reset(client.userId, message.mint);
+      client.ws.send(JSON.stringify({
+        type: 'pnl_update',
+        mint: message.mint,
+        pnl: updatedPnL
+      }));
+    } catch (err) {
+      console.error('❌ Error resetting PnL:', err.message);
+    }
   }
 
   async handleWalletList(client, message) {

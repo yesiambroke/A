@@ -70,6 +70,106 @@ type TradingTerminalProps = {
   operator: OperatorProps | null;
 };
 
+// --- Trade Log Filter Overlay ---
+const TradeLogFilterOverlay = ({
+  current,
+  onChange
+}: {
+  current: { minSol: number | null; maxSol: number | null };
+  onChange: (next: { minSol: number | null; maxSol: number | null }) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [minStr, setMinStr] = useState(current.minSol?.toString() || '');
+  const [maxStr, setMaxStr] = useState(current.maxSol?.toString() || '');
+
+  React.useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const handleApply = () => {
+    const min = minStr ? parseFloat(minStr) : null;
+    const max = maxStr ? parseFloat(maxStr) : null;
+    onChange({ minSol: min, maxSol: max });
+    setOpen(false);
+  };
+
+  const handleReset = () => {
+    setMinStr('');
+    setMaxStr('');
+    onChange({ minSol: null, maxSol: null });
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative inline-block" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`p-1 rounded hover:bg-green-500/10 transition-colors ${current.minSol !== null || current.maxSol !== null ? 'text-green-400' : 'text-green-500/40'
+          }`}
+        title="Filter Trades by Size"
+      >
+        <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-2 w-48 bg-black/95 border border-green-500/40 p-3 rounded shadow-2xl z-[100] backdrop-blur-md">
+          <div className="space-y-3">
+            <div className="text-[10px] font-mono text-green-400/60 uppercase font-bold tracking-wider text-left">SOL Size Filter</div>
+            <div className="space-y-1 text-left">
+              <label className="text-[10px] text-green-300/40 uppercase font-mono">Min SOL</label>
+              <input
+                type="number"
+                step="0.001"
+                value={minStr}
+                onChange={(e) => setMinStr(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-black/60 border border-green-500/20 px-2 py-1 text-xs text-green-100 font-mono focus:outline-none focus:border-green-400/50"
+              />
+            </div>
+            <div className="space-y-1 text-left">
+              <label className="text-[10px] text-green-300/40 uppercase font-mono">Max SOL</label>
+              <input
+                type="number"
+                step="0.001"
+                value={maxStr}
+                onChange={(e) => setMaxStr(e.target.value)}
+                placeholder="∞"
+                className="w-full bg-black/60 border border-green-500/20 px-2 py-1 text-xs text-green-100 font-mono focus:outline-none focus:border-green-400/50"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleApply}
+                className="flex-1 px-2 py-1 bg-green-500/20 border border-green-500/40 text-green-100 text-[10px] font-mono hover:bg-green-500/30 transition-colors"
+              >
+                Apply
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-2 py-1 border border-red-500/20 text-red-400 text-[10px] font-mono hover:bg-red-500/10 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const [activeTab, setActiveTab] = useState<'wallets' | 'trades' | 'holders-bubble' | 'top-trader'>('trades');
   const [rightPanelWidth, setRightPanelWidth] = useState(25);
@@ -83,9 +183,15 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
   const [tradeTokenAmount, setTradeTokenAmount] = useState<string>('');
   const [tradePercentage, setTradePercentage] = useState<string>('');
   const [slippage, setSlippage] = useState<string>('5'); // Default 5% slippage
-  const [useJito, setUseJito] = useState<boolean>(true); // Default Jito enabled
+  const [useJito, setUseJito] = useState<boolean>(false); // Default Jito disabled
   const [jitoTip, setJitoTip] = useState<number | null>(null);
   const [showSlippageTooltip, setShowSlippageTooltip] = useState(false);
+
+  // Trade Log Filter State
+  const [tradeLogFilter, setTradeLogFilter] = useState<{ minSol: number | null; maxSol: number | null }>({
+    minSol: null,
+    maxSol: null
+  });
 
   // Ladder Buy modal state
   const [showLadderBuyModal, setShowLadderBuyModal] = useState(false);
@@ -97,6 +203,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
   // Minimized modal tracking for positioning
   const [minimizedModals, setMinimizedModals] = useState<Set<string>>(new Set());
+
+  // PnL tracking state
+  const [pnlData, setPnlData] = useState<any>(null);
 
   // Minimize/Restore handlers for dynamic positioning
   const handleLadderBuyMinimize = () => {
@@ -230,6 +339,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
   const { subscribeToTrades, isConnected, marketData, fetchRecentTrades } = useMarketData();
   const tradeUnsubscribeRef = useRef<(() => void) | null>(null);
+  const connectedWalletsRef = useRef<any[]>([]);
+
+  // Sync connectedWalletsRef with state
+  React.useEffect(() => {
+    connectedWalletsRef.current = connectedWallets;
+  }, [connectedWallets]);
 
   // Load saved layout preferences
   React.useEffect(() => {
@@ -335,6 +450,9 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
               // Set connection status based on wallet data
               if (wallets.length > 0) {
                 setWalletConnectionStatus('connected');
+                if (data.pnl) {
+                  setPnlData(data.pnl);
+                }
                 console.log('🔄 Set wallet connection status to connected (have wallets)');
               } else {
                 setWalletConnectionStatus('disconnected');
@@ -470,7 +588,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                 showToast(`Transaction confirmed ${solscanLink}`);
               }
             } else if (data.type === 'transaction_failed') {
-              console.log('❌ Transaction failed:', data.error);
+              console.log('❌ Transaction failed');
 
               // Handle multi-wallet failure
               if (multiWalletProcessing.active && data.walletId === multiWalletProcessing.currentWallet) {
@@ -481,20 +599,23 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   remainingWallets: prev.remainingWallets.slice(1)
                 }));
               } else {
-                showToast(`❌ Transaction failed: ${data.error}`);
+                showToast("❌ Transaction failed");
               }
             } else if (data.type === 'nuke_response') {
               if (data.success) {
                 showToast(`✅ ${data.message || 'Nuke request processed'}`);
               } else {
-                showToast(`❌ Nuke failed: ${data.error}`);
+                showToast("❌ Nuke failed");
               }
             } else if (data.type === 'nuke_gather_complete') {
               if (data.success) {
                 showToast(`✅ Gathered ${data.walletsProcessed} wallets - ${data.message}`);
               } else {
-                showToast(`❌ Nuke gather failed: ${data.error}`);
+                showToast("❌ Nuke gather failed");
               }
+            } else if (data.type === 'pnl_update') {
+              console.log('📈 Received PnL update:', data.pnl);
+              setPnlData(data.pnl);
             }
           } catch (error) {
             console.error('Failed to parse WSS message:', error);
@@ -640,11 +761,22 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
         const newTrades = [trade, ...prev];
         return newTrades.slice(0, 50);
       });
+
+      // RELAY: If this is our trade, notify light-wss to record it for PnL
+      const isOurTrade = connectedWalletsRef.current.some(w => w.publicKey === trade.wallet);
+      if (isOurTrade && wssConnection && wssConnection.readyState === WebSocket.OPEN) {
+        console.log(`📡 Relaying our trade to light-wss for PnL:`, trade.txId);
+        wssConnection.send(JSON.stringify({
+          type: 'record_trade',
+          mint: currentCoin,
+          trade: trade
+        }));
+      }
     });
 
     tradeUnsubscribeRef.current = unsubscribe;
     return unsubscribe;
-  }, [currentCoin, subscribeToTrades]);
+  }, [currentCoin, subscribeToTrades, wssConnection]);
 
   // Initial recent trades load
   React.useEffect(() => {
@@ -1505,7 +1637,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
 
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        showToast(`❌ Wallet ${walletId} failed: ${errorMsg}`);
+        showToast(`❌ Wallet ${walletId} failed`);
         setMultiWalletProcessing(prev => ({
           ...prev,
           failedWallets: [...prev.failedWallets, walletId]
@@ -1812,108 +1944,135 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                             <th className="px-3 py-2">Type</th>
                             <th className="px-3 py-2">MC (USD)</th>
                             <th className="px-3 py-2">Amount</th>
-                            <th className="px-3 py-2">Total (SOL / USD)</th>
+                            <th className="px-3 py-2 flex items-center gap-2">
+                              <span>Total (SOL / USD)</span>
+                              <TradeLogFilterOverlay
+                                current={tradeLogFilter}
+                                onChange={setTradeLogFilter}
+                              />
+                            </th>
                             <th className="px-3 py-2">Address</th>
                             <th className="px-3 py-2">Tx</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-green-500/20">
-                          {recentTrades.map((trade, index) => (
-                            <tr
-                              key={`${trade.txId}-${index}`}
-                              className={`${trade.type === 'buy'
-                                ? 'bg-green-500/5 hover:bg-green-500/10'
-                                : 'bg-red-500/5 hover:bg-red-500/10'
-                                } transition-colors`}
-                            >
-                              <td className="px-3 py-2 whitespace-nowrap text-gray-400">
-                                {timeFormat === 'absolute'
-                                  ? new Date(trade.timestamp).toLocaleTimeString()
-                                  : formatTimeAgo(trade.timestamp)
-                                }
-                              </td>
-                              <td className="px-3 py-2 whitespace-nowrap">
-                                <span className={`font-bold ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                                  {trade.type.toUpperCase()}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 whitespace-nowrap text-gray-100 font-medium">
-                                {(() => {
-                                  const pricePerTokenUsd =
-                                    trade.usdPricePerToken ??
-                                    (marketData?.solPrice ? trade.spotPriceSol * marketData.solPrice : null);
-                                  const totalSupply = 1_000_000_000; // Default supply for calculations
-                                  const mcUsd =
-                                    pricePerTokenUsd != null && totalSupply != null
-                                      ? pricePerTokenUsd * totalSupply
-                                      : null;
-                                  return mcUsd != null ? `$${formatCompact(mcUsd, 2)}` : '—';
-                                })()}
-                              </td>
-                              <td className={`px-3 py-2 whitespace-nowrap font-semibold ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
-                                }`}>
-                                {formatCompact(trade.tokenAmount, 2)}
-                              </td>
-                              <td className={`px-3 py-2 whitespace-nowrap font-medium ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
-                                }`}>
-                                {`${trade.solAmount.toFixed(4)} / $${trade.usdAmount.toFixed(2)}`}
-                              </td>
-                              <td className="px-3 py-2 whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="text-gray-200 hover:text-white cursor-pointer transition-colors"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(trade.wallet);
-                                      showToast('Wallet address copied to clipboard!');
-                                    }}
-                                    title="Click to copy full address"
-                                  >
-                                    {trade.wallet.slice(0, 6)}...{trade.wallet.slice(-4)}
+                          {recentTrades
+                            .filter(trade => {
+                              if (tradeLogFilter.minSol !== null && trade.solAmount < tradeLogFilter.minSol) return false;
+                              if (tradeLogFilter.maxSol !== null && trade.solAmount > tradeLogFilter.maxSol) return false;
+                              return true;
+                            })
+                            .map((trade, index) => (
+                              <tr
+                                key={`${trade.txId}-${index}`}
+                                className={`${trade.type === 'buy'
+                                  ? 'bg-green-500/5 hover:bg-green-500/10'
+                                  : 'bg-red-500/5 hover:bg-red-500/10'
+                                  } transition-colors`}
+                              >
+                                <td className="px-3 py-2 whitespace-nowrap text-gray-400">
+                                  {timeFormat === 'absolute'
+                                    ? new Date(trade.timestamp).toLocaleTimeString()
+                                    : formatTimeAgo(trade.timestamp)
+                                  }
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <span className={`font-bold ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                                    {trade.type.toUpperCase()}
                                   </span>
-                                  <a
-                                    href={`https://solscan.io/account/${trade.wallet}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-gray-400 hover:text-green-400 transition-colors"
-                                    title="View on Solscan"
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                      <polyline points="15 3 21 3 21 9" />
-                                      <line x1="10" y1="14" x2="21" y2="3" />
-                                    </svg>
-                                  </a>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="text-gray-200 hover:text-white cursor-pointer transition-colors"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(trade.txId);
-                                      showToast('Transaction ID copied to clipboard!');
-                                    }}
-                                    title="Click to copy full transaction ID"
-                                  >
-                                    {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
-                                  </span>
-                                  <a
-                                    href={`https://solscan.io/tx/${trade.txId}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-gray-400 hover:text-green-400 transition-colors"
-                                    title="View transaction on Solscan"
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                      <polyline points="15 3 21 3 21 9" />
-                                      <line x1="10" y1="14" x2="21" y2="3" />
-                                    </svg>
-                                  </a>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-gray-100 font-medium">
+                                  {(() => {
+                                    const pricePerTokenUsd =
+                                      trade.usdPricePerToken ??
+                                      (marketData?.solPrice ? trade.spotPriceSol * marketData.solPrice : null);
+                                    const totalSupply = 1_000_000_000; // Default supply for calculations
+                                    const mcUsd =
+                                      pricePerTokenUsd != null && totalSupply != null
+                                        ? pricePerTokenUsd * totalSupply
+                                        : null;
+                                    return mcUsd != null ? `$${formatCompact(mcUsd, 2)}` : '—';
+                                  })()}
+                                </td>
+                                <td className={`px-3 py-2 whitespace-nowrap font-semibold ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
+                                  }`}>
+                                  {formatCompact(trade.tokenAmount, 2)}
+                                </td>
+                                <td className={`px-3 py-2 whitespace-nowrap font-medium ${trade.type === 'buy' ? 'text-green-400' : 'text-red-400'
+                                  }`}>
+                                  {`${trade.solAmount.toFixed(4)} / $${trade.usdAmount.toFixed(2)}`}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {(() => {
+                                      const isOurWallet = connectedWallets.some(w => w.publicKey === trade.wallet);
+                                      return (
+                                        <div className="flex items-center gap-1">
+                                          <span
+                                            className="text-gray-200 hover:text-white cursor-pointer transition-colors"
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(trade.wallet);
+                                              showToast('Wallet address copied to clipboard!');
+                                            }}
+                                            title={isOurWallet ? "Your Wallet (Click to copy)" : "Click to copy full address"}
+                                          >
+                                            {trade.wallet.slice(0, 6)}...{trade.wallet.slice(-4)}
+                                          </span>
+                                          {isOurWallet && (
+                                            <span className="text-yellow-400" title="Your Wallet">
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+                                                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
+                                                <path d="M4.285 9.567a.5.5 0 0 1 .683.183A3.5 3.5 0 0 0 8 11.5a3.5 3.5 0 0 0 3.032-1.75.5.5 0 1 1 .866.5A4.5 4.5 0 0 1 8 12.5a4.5 4.5 0 0 1-3.898-2.25.5.5 0 0 1 .183-.683M7 6.5C7 7.328 6.552 8 6 8s-1-.672-1-1.5S5.448 5 6 5s1 .672 1 1.5m4 0c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5S9.448 5 10 5s1 .672 1 1.5" />
+                                              </svg>
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                    <a
+                                      href={`https://solscan.io/account/${trade.wallet}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-gray-400 hover:text-green-400 transition-colors"
+                                      title="View on Solscan"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                        <polyline points="15 3 21 3 21 9" />
+                                        <line x1="10" y1="14" x2="21" y2="3" />
+                                      </svg>
+                                    </a>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="text-gray-200 hover:text-white cursor-pointer transition-colors"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(trade.txId);
+                                        showToast('Transaction ID copied to clipboard!');
+                                      }}
+                                      title="Click to copy full transaction ID"
+                                    >
+                                      {trade.txId.slice(0, 6)}...{trade.txId.slice(-4)}
+                                    </span>
+                                    <a
+                                      href={`https://solscan.io/tx/${trade.txId}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-gray-400 hover:text-green-400 transition-colors"
+                                      title="View transaction on Solscan"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                        <polyline points="15 3 21 3 21 9" />
+                                        <line x1="10" y1="14" x2="21" y2="3" />
+                                      </svg>
+                                    </a>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
                         </tbody>
                       </table>
                     </div>
@@ -2281,12 +2440,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                                           });
 
                                           if (!result.success) {
-                                            showToast(`❌ Quick sell failed: ${result.error}`);
+                                            showToast("❌ Quick sell failed");
                                           }
                                           // Transaction sent to WSS, response handled by WebSocket listener
 
                                         } catch (error) {
-                                          showToast(`❌ Quick sell failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                                          showToast("❌ Quick sell failed");
                                         }
                                       }}
                                       disabled={!wallet.splBalance || wallet.splBalance <= 0}
@@ -2373,6 +2532,7 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   SELL
                 </button>
               </div>
+
             </div>
 
             <div className="space-y-3 text-sm font-mono text-green-100">
@@ -2584,12 +2744,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                         });
 
                         if (!result.success) {
-                          showToast(`❌ ${result.error}`);
+                          showToast("❌ Transaction failed");
                         }
 
                       } catch (error) {
                         console.error('❌ Error building Pump V1 buy instructions:', error);
-                        showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        showToast("❌ Transaction failed");
                       }
                     } else {
                       // Multi-wallet sequential buying
@@ -2643,12 +2803,12 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                         });
 
                         if (!result.success) {
-                          showToast(`❌ ${result.error}`);
+                          showToast("❌ Transaction failed");
                         }
 
                       } catch (error) {
                         console.error('❌ Error building Pump V1 sell instructions:', error);
-                        showToast(`❌ Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        showToast("❌ Transaction failed");
                       }
                     } else {
                       // Multi-wallet sequential selling
@@ -2822,8 +2982,6 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   <span className="text-purple-100 text-xs font-mono font-medium">Distribute SOL</span>
                 </button>
 
-
-
                 <div className="relative group">
                   <button
                     disabled
@@ -2841,6 +2999,83 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
                   </div>
                 </div>
               </div>
+
+              {/* PnL Stats Section */}
+              {pnlData && currentCoin !== 'So11111111111111111111111111111112' && (() => {
+                const totalSplBalance = connectedWallets.reduce((sum, wallet) => sum + (wallet.splBalance || 0), 0);
+                const currentPrice = recentTrades[0]?.spotPriceSol || 0;
+                const totalValueSol = totalSplBalance * currentPrice;
+
+                return (
+                  <div className="mt-4 p-3 rounded-lg border-2 border-green-500/40 bg-black/60 shadow-lg shadow-green-500/5 hover:border-green-400 transition-all duration-300">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-bold text-green-400 tracking-wider uppercase">Live PnL</span>
+                        <span className="text-[10px] font-mono text-green-300/40 px-1.5 py-0.5 bg-green-500/10 rounded border border-green-500/20">
+                          Holdings Value: {totalValueSol.toFixed(4)} SOL
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (wssConnection && wssConnection.readyState === WebSocket.OPEN) {
+                            wssConnection.send(JSON.stringify({
+                              type: 'recalculate_pnl',
+                              mint: currentCoin
+                            }));
+                            showToast('🔄 Recalculating PnL from history...');
+                          }
+                        }}
+                        className="p-1 rounded hover:bg-green-500/10 text-green-500/40 hover:text-green-400 transition-colors"
+                        title="Recalculate PnL from history (Fix errors)"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
+                          <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-mono text-green-300/60 uppercase">Unrealized SOL</div>
+                        <div className={`text-sm font-mono font-bold ${(pnlData?.totalAmount || 0) * currentPrice - (pnlData?.totalCost || 0) >= 0
+                          ? 'text-green-400'
+                          : 'text-red-400'
+                          }`}>
+                          {((pnlData?.totalAmount || 0) * currentPrice - (pnlData?.totalCost || 0)).toFixed(4)} SOL
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-mono text-green-300/60 uppercase">Realized SOL</div>
+                        <div className={`text-sm font-mono font-bold ${pnlData?.realizedPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {pnlData?.realizedPnL?.toFixed(4)} SOL
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-mono text-green-300/60 uppercase">Cost Basis</div>
+                        <div className="text-sm font-mono text-green-100">
+                          {pnlData?.totalCost?.toFixed(4)} SOL
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-mono text-green-300/60 uppercase">Avg Entry</div>
+                        <div className="text-sm font-mono text-green-100">
+                          {pnlData?.totalAmount > 0
+                            ? (pnlData.totalCost / pnlData.totalAmount).toFixed(9)
+                            : '0.00'
+                          }
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 text-[9px] font-mono text-green-500/40 text-center italic border-t border-green-500/10 pt-1">
+                      Stats updated in real-time from matching trades
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
 
@@ -2969,18 +3204,20 @@ const TradingTerminal = ({ operator }: TradingTerminalProps) => {
       </div>
 
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className={`fixed bottom-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-500 ease-out ${showLadderBuyModal || showLadderSellModal ? 'left-4' : 'right-4'
-          }`}>
-          <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
-            <div className="flex items-center gap-2">
-              <span className="text-green-200/80">✓</span>
-              <span dangerouslySetInnerHTML={{ __html: toastMessage }} />
+      {
+        toastMessage && (
+          <div className={`fixed bottom-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-500 ease-out ${showLadderBuyModal || showLadderSellModal ? 'left-4' : 'right-4'
+            }`}>
+            <div className="bg-green-500/20 text-green-50 px-5 py-3 rounded-md shadow-lg border border-green-400/30 font-mono text-sm backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <span className="text-green-200/80">✓</span>
+                <span dangerouslySetInnerHTML={{ __html: toastMessage }} />
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 
