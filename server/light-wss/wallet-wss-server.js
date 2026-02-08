@@ -1907,9 +1907,12 @@ class WalletWSSServer {
           console.log(`      💸 Added trading fee to tx ${i + 1}`);
         }
 
-        // 5. Add Jito Tip to LAST transaction
-        // 5. Add Jito Tip to LAST transaction
-        if (i === wallets.length - 1 && useJito) {
+        // 5. Add Jito Tip to last transaction of each Jito bundle
+        // Jito bundles are max 5 transactions, so add tip every 5 txs or at the end
+        const isLastInBundle = (i + 1) % this.TRANSACTIONS_PER_BUNDLE === 0;
+        const isLastTransaction = i === wallets.length - 1;
+
+        if (isLastInBundle || isLastTransaction) {
           // Use server's polled tip or default to 0.001 SOL (fallback)
           const currentTip = this.jitoTipPoller ? this.jitoTipPoller.tipFloor : 0;
           const tipStart = currentTip > 0 ? currentTip : 0.001;
@@ -1923,7 +1926,7 @@ class WalletWSSServer {
             lamports: tipLamports
           });
           instructionArray.push(tipIx);
-          console.log(`      💡 Added Jito tip to final tx (${tipLamports} lamports, ${tipStart} SOL)`);
+          console.log(`      💡 Added Jito tip to tx ${i + 1} (bundle end, ${tipLamports} lamports, ${tipStart} SOL)`);
         }
 
         const transaction = new Transaction();
@@ -1947,6 +1950,7 @@ class WalletWSSServer {
       const bundleData = {
         bundles: [bundleTransactions],
         totalWallets: wallets.length,
+        executionMode: message.executionMode || 'safe', // Pass execution mode for Jito submission strategy
         // Mock destination details to satisfy type checks if accessed, though not used in bundle_buy
         destinationDetails: {},
         totalExpectedIncrease: 0
@@ -3175,19 +3179,34 @@ class WalletWSSServer {
         if (userConnections?.terminal) {
           const isGather = pendingRequest.requestType === 'gather_sol';
           const isLaunch = pendingRequest.requestType === 'bundle_launch';
+          const isBundleBuy = pendingRequest.requestType === 'bundle_buy';
 
           let msg = `Bundle Buy submitted to Jito! (ID: ${successfulBundles[0].bundleId})`;
           if (isGather) msg = `Gather SOL Submitted! (${successfulBundles.length} bundles sent)`;
           if (isLaunch) msg = `Bundle Launch Submitted! (${successfulBundles.length} bundles sent)`;
 
-          userConnections.terminal.ws.send(JSON.stringify({
-            type: `${pendingRequest.requestType}_response`,
-            requestId: pendingRequest.originalRequestId,
-            success: true,
-            message: msg,
-            bundleIds: allBundleIds,
-            mintAddress: isLaunch ? pendingRequest.bundleData.mintAddress : undefined
-          }));
+          // For Bundle Buy, send batch success message to enable Safe mode batch-by-batch processing
+          if (isBundleBuy) {
+            userConnections.terminal.ws.send(JSON.stringify({
+              type: 'bundle_buy_batch_success',
+              requestId: pendingRequest.originalRequestId,
+              success: true,
+              message: msg,
+              bundleId: successfulBundles[0]?.bundleId,
+              walletsProcessed: allSignedTransactions.length,
+              totalBundles: successfulBundles.length
+            }));
+          } else {
+            // For other types, use the original response format
+            userConnections.terminal.ws.send(JSON.stringify({
+              type: `${pendingRequest.requestType}_response`,
+              requestId: pendingRequest.originalRequestId,
+              success: true,
+              message: msg,
+              bundleIds: allBundleIds,
+              mintAddress: isLaunch ? pendingRequest.bundleData.mintAddress : undefined
+            }));
+          }
         }
         return;
       }

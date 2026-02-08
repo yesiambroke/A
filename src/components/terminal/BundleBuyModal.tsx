@@ -68,9 +68,9 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
   const [bundleBuyAmount, setBundleBuyAmount] = useState('');
   const [bundleBuyDelay, setBundleBuyDelay] = useState('1');
 
-  // Batch configuration
-  const [batchSize, setBatchSize] = useState(5);
-  const [useRandomBatchSize, setUseRandomBatchSize] = useState(false);
+  // Launch strategy and execution
+  const [launchStrategy, setLaunchStrategy] = useState<'pentad' | 'ignis'>('pentad');
+  const [executionMode, setExecutionMode] = useState<'turbo' | 'safe'>('safe');
 
   // Randomization state
   const [bundleBuyRandomPercentage, setBundleBuyRandomPercentage] = useState(60);
@@ -178,6 +178,7 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
     setBundleBuyAmounts(newAmounts);
   };
 
+
   // Bundle buy execution
   const startBundleBuy = async () => {
     if (isBundleBuyRunning) return;
@@ -192,10 +193,35 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
       return;
     }
 
-    // Determine batch size
-    const currentBatchSize = useRandomBatchSize
-      ? Math.floor(Math.random() * 4) + 2 // Random 2-5
-      : Math.max(1, Math.min(5, batchSize)); // User specified, clamped 1-5
+    setIsBundleBuyRunning(true);
+    setIsBundleBuyCancelled(false);
+
+    const abortController = new AbortController();
+    setBundleBuyAbortController(abortController);
+
+    try {
+      if (executionMode === 'safe') {
+        // SAFE MODE: Batch-by-batch with server confirmation
+        await executeSafeMode(abortController);
+      } else {
+        // TURBO MODE: All wallets at once
+        await executeTurboMode(abortController);
+      }
+    } catch (error) {
+      console.error('Bundle buy error:', error);
+      onToast('Bundle buy failed');
+    } finally {
+      setIsBundleBuyRunning(false);
+      setBundleBuyAbortController(null);
+    }
+  };
+
+  // Safe Mode: Send batches sequentially, wait for confirmation
+  const executeSafeMode = async (abortController: AbortController) => {
+    // Determine batch size based on strategy
+    const currentBatchSize = launchStrategy === 'ignis'
+      ? Math.floor(Math.random() * 4) + 2 // Random 2-5 for Ignis
+      : 5; // Fixed 5 for Pentad
 
     // Create batches
     const batches: string[][] = [];
@@ -205,76 +231,143 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
 
     if (batches.length === 0) return;
 
-    setIsBundleBuyRunning(true);
-    setIsBundleBuyCancelled(false);
     setBundleBuyBatches(batches);
     setProcessedBatches([]);
 
-    const abortController = new AbortController();
-    setBundleBuyAbortController(abortController);
+    onToast(`🛡️ Safe Mode: ${batches.length} batches of max ${currentBatchSize} wallets`);
 
-    onToast(`Starting bundle buy with ${batches.length} batches of max ${currentBatchSize} wallets...`);
-
-    try {
-      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-        if (abortController.signal.aborted) {
-          return;
-        }
-
-        const batch = batches[batchIndex];
-        const batchWallets = batch.map(id => connectedWallets.find(w => w.id === id)).filter(Boolean);
-
-        // Check if batch has valid amounts
-        const validBatch = batch.filter(walletId => {
-          const amount = parseFloat(bundleBuyAmounts[walletId] || '0');
-          return amount > 0;
-        });
-
-        if (validBatch.length === 0) {
-          setProcessedBatches(prev => [...prev, batchIndex]);
-          continue;
-        }
-
-        onToast(`Executing batch ${batchIndex + 1}/${batches.length}: ${validBatch.length} wallets`);
-
-        // Send actual batch trade request via WSS
-        const batchRequest = {
-          type: 'bundle_buy_request',
-          requestId: `bundle_buy_${Date.now()}_${batchIndex}`,
-          mintAddress: mintAddress,
-          wallets: validBatch.map(walletId => ({
-            walletId,
-            amount: parseFloat(bundleBuyAmounts[walletId] || '0').toFixed(6)
-          })),
-          slippage: parseFloat(slippage) || 5,
-          protocol: protocolType || 'v1',
-          pairAddress,
-          useJito,
-          // @ts-ignore - Dynamic tip update
-          jitoTipAmount: jitoTip
-        };
-
-        console.log('📤 Sending Bundle Buy Request:', batchRequest);
-        wssConnection.send(JSON.stringify(batchRequest));
-
-        // Wait for processing delay (simulated or real response handling could be added)
-        // Ideally we listen for 'bundle_buy_response' but for now just staggering the requests
-        const delayMs = (parseFloat(bundleBuyDelay) || 1) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-
-        setProcessedBatches(prev => [...prev, batchIndex]);
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      if (abortController.signal.aborted) {
+        onToast('❌ Bundle buy cancelled');
+        return;
       }
 
-      onToast('Bundle buy requests sent!');
+      const batch = batches[batchIndex];
 
-      setIsBundleBuyRunning(false);
-      setBundleBuyAbortController(null);
-    } catch (error) {
-      console.error('Bundle buy error:', error);
-      onToast('Bundle buy failed');
-      setIsBundleBuyRunning(false);
-      setBundleBuyAbortController(null);
+      // Check if batch has valid amounts
+      const validBatch = batch.filter(walletId => {
+        const amount = parseFloat(bundleBuyAmounts[walletId] || '0');
+        return amount > 0;
+      });
+
+      if (validBatch.length === 0) {
+        setProcessedBatches(prev => [...prev, batchIndex]);
+        continue;
+      }
+
+      onToast(`📦 Batch ${batchIndex + 1}/${batches.length}: ${validBatch.length} wallets`);
+
+      // Send batch and wait for confirmation
+      const success = await sendBatchAndWaitForConfirmation(validBatch, batchIndex);
+
+      if (!success) {
+        onToast(`❌ Batch ${batchIndex + 1} failed. Stopping.`);
+        return;
+      }
+
+      setProcessedBatches(prev => [...prev, batchIndex]);
+      onToast(`✅ Batch ${batchIndex + 1}/${batches.length} confirmed!`);
     }
+
+    onToast('✅ All batches completed!');
+  };
+
+  // Turbo Mode: Send all wallets at once
+  const executeTurboMode = async (abortController: AbortController) => {
+    // Filter valid wallets
+    const validWallets = selectedWallets.filter(walletId => {
+      const amount = parseFloat(bundleBuyAmounts[walletId] || '0');
+      return amount > 0;
+    });
+
+    if (validWallets.length === 0) {
+      onToast('❌ No valid wallets with amounts');
+      return;
+    }
+
+    onToast(`⚡ Turbo Mode: ${validWallets.length} wallets at once`);
+
+    // Send all wallets in single request
+    const requestId = `bundle_buy_${Date.now()}`;
+    const batchRequest = {
+      type: 'bundle_buy_request',
+      requestId,
+      mintAddress: mintAddress,
+      wallets: validWallets.map(walletId => ({
+        walletId,
+        amount: parseFloat(bundleBuyAmounts[walletId] || '0').toFixed(6)
+      })),
+      slippage: parseFloat(slippage) || 5,
+      protocol: protocolType || 'v1',
+      pairAddress,
+      useJito,
+      strategy: launchStrategy,
+      executionMode: executionMode,
+      // @ts-ignore - Dynamic tip update
+      jitoTipAmount: jitoTip
+    };
+
+    console.log('📤 Sending Turbo Bundle Buy Request:', batchRequest);
+    wssConnection?.send(JSON.stringify(batchRequest));
+
+    // Wait for response (handled by existing message listener)
+    onToast('⏳ Processing all wallets...');
+  };
+
+  // Helper: Send batch and wait for server confirmation
+  const sendBatchAndWaitForConfirmation = (validBatch: string[], batchIndex: number): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const requestId = `bundle_buy_${Date.now()}_${batchIndex}`;
+      const timeout = setTimeout(() => {
+        console.error(`⏰ Batch ${batchIndex} timed out`);
+        resolve(false);
+      }, 120000); // 2 minute timeout
+
+      // Set up one-time listener for this batch
+      const handleBatchSuccess = (event: MessageEvent) => {
+        try {
+          const message = JSON.parse(event.data);
+
+          if (message.type === 'bundle_buy_batch_success' && message.requestId === requestId) {
+            clearTimeout(timeout);
+            wssConnection?.removeEventListener('message', handleBatchSuccess);
+            console.log(`✅ Batch ${batchIndex} confirmed:`, message);
+            resolve(true);
+          } else if (message.type === 'error' && message.requestId === requestId) {
+            clearTimeout(timeout);
+            wssConnection?.removeEventListener('message', handleBatchSuccess);
+            console.error(`❌ Batch ${batchIndex} error:`, message);
+            resolve(false);
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      };
+
+      wssConnection?.addEventListener('message', handleBatchSuccess);
+
+      // Send the batch request
+      const batchRequest = {
+        type: 'bundle_buy_request',
+        requestId,
+        mintAddress: mintAddress,
+        wallets: validBatch.map(walletId => ({
+          walletId,
+          amount: parseFloat(bundleBuyAmounts[walletId] || '0').toFixed(6)
+        })),
+        slippage: parseFloat(slippage) || 5,
+        protocol: protocolType || 'v1',
+        pairAddress,
+        useJito,
+        strategy: launchStrategy,
+        executionMode: executionMode,
+        // @ts-ignore - Dynamic tip update
+        jitoTipAmount: jitoTip
+      };
+
+      console.log(`📤 Sending Batch ${batchIndex}:`, batchRequest);
+      wssConnection?.send(JSON.stringify(batchRequest));
+    });
   };
 
   if (!isOpen) return null;
@@ -445,57 +538,91 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
           <div className="w-80 p-6 overflow-y-auto">
             <div className="space-y-6">
               {/* Amount Input */}
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-amber-300/80 font-mono text-xs font-medium mb-1">Buy Amounts (SOL)</label>
+              <div className="space-y-4">
+                {/* Strategy Selector */}
+                <div className="space-y-2">
+                  <label className="block text-amber-300/80 font-mono text-[10px] uppercase font-bold tracking-wider mb-1 px-1">Strategy</label>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-amber-500/5 rounded-lg border border-amber-500/10">
+                    <button
+                      type="button"
+                      onClick={() => setLaunchStrategy('pentad')}
+                      className={`flex items-center justify-center gap-1.5 py-2 rounded-md font-mono text-[10px] uppercase font-bold transition-all ${launchStrategy === 'pentad'
+                        ? 'bg-amber-500/20 text-amber-200 border border-amber-400/30'
+                        : 'text-amber-500/40 hover:text-amber-400/60 hover:bg-amber-500/5'
+                        }`}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M6 5V19M10 5V19M14 5V19M18 5V19" strokeLinecap="round" />
+                        <path d="M3 17L21 7" strokeLinecap="round" opacity="0.8" />
+                      </svg>
+                      Pentad
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLaunchStrategy('ignis')}
+                      className={`flex items-center justify-center gap-1.5 py-2 rounded-md font-mono text-[10px] uppercase font-bold transition-all ${launchStrategy === 'ignis'
+                        ? 'bg-amber-500/20 text-amber-200 border border-amber-400/30'
+                        : 'text-amber-500/40 hover:text-amber-400/60 hover:bg-amber-500/5'
+                        }`}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 16c3.314 0 6-2 6-5.5 0-1.5-.5-4-2.5-6 .25 1.5-1.25 2-1.25 2C11 4 9 .5 6 0c.357 2 .5 4-2 6-1.25 1-2 2.729-2 4.5C2 14 4.686 16 8 16m0-1c-1.657 0-3-1-3-2.75 0-.75.25-2 1.25-3C6.125 10 7 10.5 7 10.5c-.375-1.25.5-3.25 2-3.5-.179 1-.25 2 1 3 .625.5 1 1.364 1 2.25C11 14 9.657 15 8 15" />
+                      </svg>
+                      Ignis
+                    </button>
+                  </div>
+                </div>
+
+                {/* Execution Mode Selector */}
+                <div className="space-y-2">
+                  <label className="block text-amber-300/80 font-mono text-[10px] uppercase font-bold tracking-wider mb-1 px-1">Execution Mode</label>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-amber-500/5 rounded-lg border border-amber-500/10">
+                    <button
+                      type="button"
+                      onClick={() => setExecutionMode('turbo')}
+                      className={`flex items-center justify-center gap-1.5 py-2 rounded-md font-mono text-[10px] uppercase font-bold transition-all ${executionMode === 'turbo'
+                        ? 'bg-amber-500/20 text-amber-200 border border-amber-400/30'
+                        : 'text-amber-500/40 hover:text-amber-400/60 hover:bg-amber-500/5'
+                        }`}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" />
+                      </svg>
+                      Turbo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExecutionMode('safe')}
+                      className={`flex items-center justify-center gap-1.5 py-2 rounded-md font-mono text-[10px] uppercase font-bold transition-all ${executionMode === 'safe'
+                        ? 'bg-amber-500/20 text-amber-200 border border-amber-400/30'
+                        : 'text-amber-500/40 hover:text-amber-400/60 hover:bg-amber-500/5'
+                        }`}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" />
+                        <path d="M9 11L11 13L15 9" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      Safe
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <label className="block text-amber-300/80 font-mono text-xs font-medium mb-1 px-1">Buy Amounts (SOL)</label>
                   <input
                     type="text"
                     value={bundleBuyAmount}
                     onChange={handleMainAmountChange}
                     placeholder="0.1 or 0.1,0.2,0.3"
-                    className="w-full rounded border border-amber-500/30 bg-black/60 px-3 py-1.5 text-amber-100 placeholder:text-amber-500/40 focus:outline-none focus:border-amber-400 text-xs"
+                    className="w-full rounded border border-amber-500/30 bg-black/60 px-3 py-1.5 text-amber-100 placeholder:text-amber-500/40 focus:outline-none focus:border-amber-400 text-xs shadow-inner"
                     disabled={isBundleBuyRunning}
                   />
-                  <div className="text-amber-500/60 text-xs font-mono mt-1">
-                    Single amount for all, or comma-separated for individual
+                  <div className="text-amber-500/40 text-[10px] font-mono mt-1.5 px-1 leading-relaxed">
+                    Specify a fixed amount for all wallets, or use commas for individual control.
                   </div>
                 </div>
               </div>
 
-              {/* Batch Configuration */}
-              <div className="space-y-3">
-                <h4 className="text-amber-300 font-mono font-medium text-sm">Batch Settings</h4>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="useRandomBatchSize"
-                      checked={useRandomBatchSize}
-                      onChange={(e) => setUseRandomBatchSize(e.target.checked)}
-                      disabled={isBundleBuyRunning}
-                      className="rounded border border-amber-500/30 bg-black/60 text-amber-400 focus:outline-none focus:border-amber-400"
-                    />
-                    <label htmlFor="useRandomBatchSize" className="text-amber-300/80 font-mono text-xs">Random batch size (2-5 wallets)</label>
-                  </div>
-
-                  {!useRandomBatchSize && (
-                    <div className="flex items-center gap-2">
-                      <label className="text-amber-300/80 font-mono text-xs font-medium whitespace-nowrap">Batch Size</label>
-                      <input
-                        type="number"
-                        value={batchSize}
-                        onChange={(e) => setBatchSize(Math.max(1, Math.min(5, parseInt(e.target.value) || 5)))}
-                        className="w-16 rounded border border-amber-500/30 bg-black/60 px-2 py-1 text-amber-100 focus:outline-none focus:border-amber-400 text-xs"
-                        disabled={isBundleBuyRunning}
-                        min="1"
-                        max="5"
-                      />
-                      <span className="text-amber-300/80 font-mono text-xs">wallets/batch</span>
-                    </div>
-                  )}
-                </div>
-              </div>
 
               {/* Settings */}
               <div className="space-y-3">
@@ -618,9 +745,9 @@ const BundleBuyModal: React.FC<BundleBuyModalProps> = ({
                     <div className="flex justify-between">
                       <span className="text-amber-500/70 font-mono">Batches</span>
                       <span className="text-amber-100 font-mono">
-                        {useRandomBatchSize
+                        {launchStrategy === 'ignis'
                           ? `~${Math.ceil(selectedWallets.length / 3)}`
-                          : Math.ceil(selectedWallets.length / Math.max(1, Math.min(5, batchSize)))
+                          : Math.ceil(selectedWallets.length / 5)
                         }
                       </span>
                     </div>
